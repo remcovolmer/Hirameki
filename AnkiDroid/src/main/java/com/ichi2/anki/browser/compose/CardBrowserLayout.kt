@@ -243,7 +243,7 @@ fun CardBrowserLayout(
                 selectedItem = AppNavigationItem.CardBrowser,
                 onNavigate = { item ->
                     when (item) {
-                        AppNavigationItem.Decks -> onNavigateUp()
+                        AppNavigationItem.Decks, AppNavigationItem.Discover -> onNavigateUp()
                         AppNavigationItem.CardBrowser -> { // Already here
                         }
 
