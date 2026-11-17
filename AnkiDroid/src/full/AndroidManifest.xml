@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  brainiac fork: the full flavor is the build on GitHub Releases, and it updates itself
+  (com.ichi2.anki.brainiac.update, BuildConfig.BRAINIAC_UPDATER_ENABLED). The permission lives here and not in
+  src/main, so the play flavor does not ask for it: Google Play restricts REQUEST_INSTALL_PACKAGES to apps whose
+  core purpose is installing apps, and a store build is updated by its store anyway.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application>
+        <!-- result of the PackageInstaller session; only the system reaches it, through our PendingIntent -->
+        <receiver
+            android:name="com.ichi2.anki.brainiac.update.UpdateInstallReceiver"
+            android:exported="false" />
+    </application>
+</manifest>
