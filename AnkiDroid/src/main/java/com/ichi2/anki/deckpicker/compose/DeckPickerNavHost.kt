@@ -77,6 +77,8 @@ import com.ichi2.anki.dialogs.compose.LoginToAnkiWebDialog
 import com.ichi2.anki.dialogs.compose.NetworkErrorDialog
 import com.ichi2.anki.dialogs.compose.NoSpaceLeftDialog
 import com.ichi2.anki.dialogs.customstudy.CustomStudyDialog
+import com.ichi2.anki.discover.ui.DiscoverDestination
+import com.ichi2.anki.discover.ui.DiscoverRoute
 import com.ichi2.anki.launchCatchingTask
 import com.ichi2.anki.navigation.CongratsScreen
 import com.ichi2.anki.navigation.ContributeScreen
@@ -284,6 +286,10 @@ fun DeckPickerNavHost(
 
             entry<StatisticsDestination> {
                 StatisticsScreen(onNavigateUp = { navigator.goBack() })
+            }
+
+            entry<DiscoverDestination> {
+                DiscoverRoute(onNavigateUp = { navigator.goBack() }, onSync = { viewModel.sync() })
             }
 
             entry<ManageNoteTypesDestination> {
@@ -573,6 +579,10 @@ private fun DeckPickerMainContent(
                         ),
                     )
                 }
+            }
+
+            AppNavigationItem.Discover -> {
+                navigator.navigate(DiscoverDestination)
             }
 
             AppNavigationItem.Statistics -> {

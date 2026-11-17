@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Strings of the Brainiac Discover screen. Kept in their own file so the fork rebases cleanly.
+-->
+<resources>
+    <string name="discover_title">Discover</string>
+    <string name="discover_refresh">Refresh</string>
+    <string name="discover_settings">Discover settings</string>
+    <string name="discover_lessons_header">Lessons</string>
+    <string name="discover_queue_header">Queue</string>
+    <string name="discover_no_lessons">No open lessons. New lessons appear here after the routine has run.</string>
+    <string name="discover_queue_empty">The queue is empty.</string>
+    <plurals name="discover_cards_to_review">
+        <item quantity="one">%d card to review</item>
+        <item quantity="other">%d cards to review</item>
+    </plurals>
+    <string name="discover_lesson_read">Read</string>
+    <string name="discover_process_now">Process now</string>
+    <string name="discover_add_title">Add title</string>
+    <string name="discover_source_status_queued">Not processed yet</string>
+    <string name="discover_source_status_failed">Failed</string>
+    <string name="discover_source_status_processed">Processed</string>
+    <plurals name="discover_pending_approvals">
+        <item quantity="one">%d approved card is in your collection but not yet reported to the server. It is retried on refresh.</item>
+        <item quantity="other">%d approved cards are in your collection but not yet reported to the server. They are retried on refresh.</item>
+    </plurals>
+
+    <!-- Errors and states -->
+    <string name="discover_not_configured">Set the server address and app token of your Brainiac service to use Discover.</string>
+    <string name="discover_error_network">Could not reach the Brainiac server. Check your connection (Tailscale) and the server address.</string>
+    <string name="discover_error_unauthorized">The server rejected the app token (401). Check the token in the settings.</string>
+    <string name="discover_error_not_found">Not found on the server.</string>
+    <string name="discover_error_conflict">Already done: %s</string>
+    <string name="discover_error_conflict_generic">This was already done a moment ago.</string>
+    <string name="discover_error_unavailable">Processing is not available: the routine is not configured on the server (503).</string>
+    <string name="discover_error_server">Server error: %s</string>
+
+    <!-- Settings -->
+    <string name="discover_server_url">Server address</string>
+    <string name="discover_server_url_hint">For example http://brainiac.example.home</string>
+    <string name="discover_app_token">App token</string>
+    <string name="discover_settings_invalid">Enter a valid http(s) address and a token.</string>
+    <string name="discover_settings_saved">Settings saved</string>
+
+    <!-- Add source -->
+    <string name="discover_source_title">Title</string>
+    <string name="discover_source_author">Author (optional)</string>
+    <string name="discover_source_note">Note (optional)</string>
+    <string name="discover_source_kind_book">Book</string>
+    <string name="discover_source_kind_path">Learning path</string>
+    <string name="discover_source_kind_other">Something else</string>
+    <string name="discover_source_added">Added to the queue</string>
+    <string name="discover_processing_started">Processing started. New lessons appear here when it is done.</string>
+
+    <!-- Lesson -->
+    <string name="discover_next">Next screen</string>
+    <string name="discover_previous">Previous</string>
+    <string name="discover_sources_header">Sources</string>
+    <string name="discover_source_checked">checked %s</string>
+    <plurals name="discover_review_cards">
+        <item quantity="one">Review card (%d)</item>
+        <item quantity="other">Review cards (%d)</item>
+    </plurals>
+    <string name="discover_done_reading">Finish lesson</string>
+    <string name="discover_page_indicator">Screen %1$d of %2$d</string>
+
+    <!-- Review -->
+    <string name="discover_reject">Don’t add</string>
+    <string name="discover_card_counter">Card %1$d of %2$d</string>
+    <string name="discover_approve">Yes, add</string>
+    <string name="discover_change">Change…</string>
+    <string name="discover_change_edit">Edit it myself</string>
+    <string name="discover_change_feedback">Feedback to Claude</string>
+    <string name="discover_edit_title">Edit card</string>
+    <string name="discover_edit_save">Add to collection</string>
+    <string name="discover_feedback_title">What should be different?</string>
+    <string name="discover_feedback_send">Send</string>
+    <string name="discover_reject_title">Why not?</string>
+    <string name="discover_reject_bad">Bad card</string>
+    <string name="discover_reject_not_interesting">Not interesting</string>
+    <string name="discover_reject_known">I know this already</string>
+    <string name="discover_reject_duplicate">Duplicate</string>
+    <string name="discover_reject_other">Other reason</string>
+    <string name="discover_reject_comment">Explanation</string>
+    <string name="discover_comment_required">Please enter a text first.</string>
+    <string name="discover_saved_locally">The card is in your collection, but the server has not been told yet.</string>
+    <string name="discover_saved_locally_retry">Report again</string>
+    <string name="discover_missing_notetype">The note type “%s” does not exist in your collection. Nothing was added; the card stays open.</string>
+    <string name="discover_unknown_fields">The note type “%1$s” has no field(s) %2$s. Nothing was added; the card stays open.</string>
+    <string name="discover_review_done">All cards of this lesson are reviewed.</string>
+    <plurals name="discover_review_done_added">
+        <item quantity="one">%d card added. Syncing…</item>
+        <item quantity="other">%d cards added. Syncing…</item>
+    </plurals>
+    <string name="discover_back_to_overview">Back to Discover</string>
+</resources>
