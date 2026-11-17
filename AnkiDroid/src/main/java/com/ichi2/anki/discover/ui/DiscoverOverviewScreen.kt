@@ -40,6 +40,7 @@ import com.ichi2.anki.R
 import com.ichi2.anki.discover.DiscoverError
 import com.ichi2.anki.discover.LessonStatus
 import com.ichi2.anki.discover.LessonSummary
+import com.ichi2.anki.discover.OrphanReason
 import com.ichi2.anki.discover.OverviewState
 import com.ichi2.anki.discover.Source
 import com.ichi2.anki.discover.SourceKind
@@ -55,6 +56,7 @@ internal fun DiscoverOverviewScreen(
     onAddSource: (title: String, author: String?, kind: SourceKind, note: String?) -> Unit,
     onRetry: () -> Unit,
     onOpenSettings: () -> Unit,
+    onDismissOrphan: (proposalId: Long) -> Unit,
 ) {
     var showAddSource by rememberSaveable { mutableStateOf(false) }
 
@@ -101,6 +103,13 @@ internal fun DiscoverOverviewScreen(
                         )
                     }
                 }
+            }
+            items(state.orphans, key = { "orphan-${it.proposalId}" }) { orphan ->
+                DiscoverErrorCard(
+                    text = orphanText(orphan.noteId ?: 0, orphan.orphanReason ?: OrphanReason.PROPOSAL_NOT_NEW),
+                    actionLabel = stringResource(R.string.discover_orphan_dismiss),
+                    onAction = { onDismissOrphan(orphan.proposalId) },
+                )
             }
             item { SectionHeader(stringResource(R.string.discover_lessons_header)) }
             if (state.loaded && state.lessons.isEmpty()) {

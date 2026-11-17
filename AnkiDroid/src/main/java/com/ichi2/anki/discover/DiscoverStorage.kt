@@ -20,18 +20,39 @@ interface DiscoverSettings {
     )
 }
 
+/** Why the service refused the report of a note that already exists locally. */
+@Serializable
+enum class OrphanReason {
+    /** 409 `proposal_not_new`: the proposal was decided elsewhere (or a 409 without code). */
+    PROPOSAL_NOT_NEW,
+
+    /** 409 `note_id_mismatch`: the proposal was approved with another note. */
+    NOTE_ID_MISMATCH,
+
+    /** 404: the proposal no longer exists. */
+    NOT_FOUND,
+}
+
 /**
- * A "yes" whose note exists in the local collection but which the service has not acknowledged
- * yet. Kept until the decision is reported, so a retry reports [noteId] instead of creating a
- * second note.
+ * A "yes" that the service has not acknowledged yet.
+ *
+ * - [noteId] null: a marker written just before the note is created. If the app dies before the id
+ *   is stored, the next attempt looks for that note instead of creating a second one.
+ * - [noteId] set, [orphanReason] null: the note exists, the report is retried with the same id.
+ * - [orphanReason] set: the service refused the report. The note stays in the collection without a
+ *   link; it is shown to the user and never reported again.
  */
 @Serializable
 data class PendingApproval(
     val proposalId: Long,
-    val noteId: Long,
+    val noteId: Long? = null,
     /** The fields as the user edited them, or null when the proposal was accepted unchanged. */
     val editedFields: Map<String, String>? = null,
-)
+    val orphanReason: OrphanReason? = null,
+) {
+    val awaitingReport: Boolean get() = noteId != null && orphanReason == null
+    val isOrphan: Boolean get() = noteId != null && orphanReason != null
+}
 
 interface PendingApprovalStore {
     fun get(proposalId: Long): PendingApproval?

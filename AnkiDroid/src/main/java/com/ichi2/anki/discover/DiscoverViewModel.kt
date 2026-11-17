@@ -21,10 +21,43 @@ data class DiscoverError(
     val kind: Kind,
     val detail: String? = null,
 ) {
-    enum class Kind { NotConfigured, Network, Unauthorized, NotFound, Conflict, ServiceUnavailable, Server }
+    enum class Kind {
+        NotConfigured,
+        Network,
+        Unauthorized,
+        NotFound,
+
+        /** A 409 without a code the app knows. */
+        Conflict,
+        ProposalNotNew,
+        DoubleTap,
+        SourceNotQueued,
+        RoutineNotConfigured,
+        RoutineFailed,
+
+        /** A 503 without a code the app knows. */
+        ServiceUnavailable,
+        Server,
+    }
 
     companion object {
-        fun from(e: DiscoverApiException) =
+        /** Decides on the service's error `code`; falls back to the HTTP status when it is missing. */
+        fun from(e: DiscoverApiException): DiscoverError {
+            val byCode =
+                when (e.errorCode) {
+                    DiscoverErrorCode.DOUBLE_TAP -> Kind.DoubleTap
+                    DiscoverErrorCode.SOURCE_NOT_QUEUED -> Kind.SourceNotQueued
+                    DiscoverErrorCode.ROUTINE_NOT_CONFIGURED -> Kind.RoutineNotConfigured
+                    DiscoverErrorCode.ROUTINE_FAILED -> Kind.RoutineFailed
+                    DiscoverErrorCode.PROPOSAL_NOT_NEW, DiscoverErrorCode.NOTE_ID_MISMATCH -> Kind.ProposalNotNew
+                    DiscoverErrorCode.UNAUTHORIZED -> Kind.Unauthorized
+                    DiscoverErrorCode.NOT_FOUND -> Kind.NotFound
+                    DiscoverErrorCode.INVALID, DiscoverErrorCode.INTERNAL, null -> null
+                }
+            return byCode?.let { DiscoverError(it, e.detail) } ?: fromStatus(e)
+        }
+
+        private fun fromStatus(e: DiscoverApiException) =
             when (e) {
                 is DiscoverApiException.Network -> DiscoverError(Kind.Network)
                 is DiscoverApiException.Unauthorized -> DiscoverError(Kind.Unauthorized)
@@ -32,7 +65,7 @@ data class DiscoverError(
                 is DiscoverApiException.Conflict -> DiscoverError(Kind.Conflict, e.detail)
                 is DiscoverApiException.ServiceUnavailable -> DiscoverError(Kind.ServiceUnavailable, e.detail)
                 is DiscoverApiException.InvalidRequest -> DiscoverError(Kind.Server, e.detail)
-                is DiscoverApiException.Http -> DiscoverError(Kind.Server, e.detail ?: "HTTP ${e.code}")
+                is DiscoverApiException.Http -> DiscoverError(Kind.Server, e.detail ?: "HTTP ${e.status}")
                 is DiscoverApiException.InvalidResponse -> DiscoverError(Kind.Server, e.message)
             }
     }
@@ -56,6 +89,12 @@ sealed interface DiscoverMessage {
     /** The note is in the collection, the service does not know yet. */
     data object SavedLocally : DiscoverMessage
 
+    /** The service refused an approved card; its note stays in the collection without a link. */
+    data class Orphaned(
+        val noteId: Long,
+        val reason: OrphanReason,
+    ) : DiscoverMessage
+
     data class AlreadyDecided(
         val detail: String?,
     ) : DiscoverMessage
@@ -78,6 +117,8 @@ data class OverviewState(
     /** Sources whose "process" call is in flight; their button is disabled against double taps. */
     val processingSourceIds: Set<Long> = emptySet(),
     val pendingApprovals: Int = 0,
+    /** Approved notes the service refused; shown until dismissed. */
+    val orphans: List<PendingApproval> = emptyList(),
 ) {
     /** The queue shows everything the routine has not finished yet. */
     val queue: List<Source> get() = sources.filter { it.status != SourceStatus.PROCESSED }
@@ -125,7 +166,10 @@ class DiscoverViewModel(
             DiscoverUiState(
                 serverUrl = settings.serverUrl,
                 token = settings.token,
-                overview = OverviewState(pendingApprovals = pendingApprovals.all().size),
+                overview =
+                    pendingApprovals.all().let { all ->
+                        OverviewState(pendingApprovals = all.count { it.awaitingReport }, orphans = all.filter { it.isOrphan })
+                    },
             ),
         )
     val uiState: StateFlow<DiscoverUiState> = _uiState.asStateFlow()
@@ -149,7 +193,7 @@ class DiscoverViewModel(
         }
         _uiState.update { it.copy(overview = it.overview.copy(loading = true, error = null)) }
         viewModelScope.launch {
-            val stillPending = decisions(api).reportPendingApprovals()
+            val pending = decisions(api).reportPendingApprovals()
             try {
                 val lessons = api.openLessons()
                 val sources = api.sources()
@@ -162,13 +206,22 @@ class DiscoverViewModel(
                                 lessons = lessons,
                                 sources = sources,
                                 error = null,
-                                pendingApprovals = stillPending,
+                                pendingApprovals = pending.waiting,
+                                orphans = pending.orphans,
                             ),
                     )
                 }
             } catch (e: DiscoverApiException) {
                 _uiState.update {
-                    it.copy(overview = it.overview.copy(loading = false, error = DiscoverError.from(e), pendingApprovals = stillPending))
+                    it.copy(
+                        overview =
+                            it.overview.copy(
+                                loading = false,
+                                error = DiscoverError.from(e),
+                                pendingApprovals = pending.waiting,
+                                orphans = pending.orphans,
+                            ),
+                    )
                 }
             }
         }
@@ -257,7 +310,7 @@ class DiscoverViewModel(
             try {
                 val lesson = api.lesson(lessonId)
                 val toReview = lesson.proposals.filter { it.status == ProposalStatus.NEW }
-                val savedLocally = toReview.mapNotNull { p -> pendingApprovals.get(p.id)?.let { p.id } }.toSet()
+                val savedLocally = toReview.filter { p -> pendingApprovals.get(p.id)?.awaitingReport == true }.map { it.id }.toSet()
                 updateLesson(lessonId) {
                     it.copy(loading = false, lesson = lesson, toReview = toReview, savedLocally = savedLocally)
                 }
@@ -318,7 +371,9 @@ class DiscoverViewModel(
         viewModelScope.launch {
             val outcome = action(decisions(api), lesson, proposal)
             val approved = outcome is DecisionOutcome.Decided && outcome.proposal.status == ProposalStatus.APPROVED
-            val advance = outcome is DecisionOutcome.Decided || outcome is DecisionOutcome.AlreadyDecided
+            // an orphaned card is decided elsewhere: retrying is pointless, so move on
+            val advance =
+                outcome is DecisionOutcome.Decided || outcome is DecisionOutcome.AlreadyDecided || outcome is DecisionOutcome.Orphaned
             updateLesson(lesson.id) {
                 it.copy(
                     busy = false,
@@ -340,12 +395,34 @@ class DiscoverViewModel(
         when (outcome) {
             is DecisionOutcome.Decided -> null
             is DecisionOutcome.SavedLocally -> DiscoverMessage.SavedLocally
+            is DecisionOutcome.Orphaned -> DiscoverMessage.Orphaned(outcome.noteId, outcome.reason)
             is DecisionOutcome.AlreadyDecided -> DiscoverMessage.AlreadyDecided(outcome.detail)
             is DecisionOutcome.MissingNotetype -> DiscoverMessage.MissingNotetype(outcome.notetype)
             is DecisionOutcome.UnknownFields -> DiscoverMessage.UnknownFields(outcome.notetype, outcome.fields)
             DecisionOutcome.CommentRequired -> DiscoverMessage.CommentRequired
             is DecisionOutcome.Failed -> DiscoverMessage.Error(DiscoverError.from(outcome.error))
         }
+
+    /** The user has seen the unlinked note of [proposalId]; the note itself stays in Anki. */
+    fun dismissOrphan(proposalId: Long) {
+        val api = currentConfig()?.let(apiFactory)
+        if (api != null) {
+            decisions(api).dismissOrphan(proposalId)
+        } else {
+            pendingApprovals.get(proposalId)?.takeIf { it.isOrphan }?.let { pendingApprovals.remove(proposalId) }
+        }
+        _uiState.update {
+            it.copy(
+                overview =
+                    it.overview.copy(
+                        orphans =
+                            it.overview.orphans.filterNot { o ->
+                                o.proposalId == proposalId
+                            },
+                    ),
+            )
+        }
+    }
 
     fun syncStarted() = _uiState.update { it.copy(syncRequested = false) }
 

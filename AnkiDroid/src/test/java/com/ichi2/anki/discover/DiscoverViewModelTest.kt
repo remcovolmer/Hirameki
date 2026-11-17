@@ -24,7 +24,7 @@ class DiscoverViewModelTest : JvmTest() {
         DiscoverViewModel(
             settings = settings,
             apiFactory = { api },
-            noteCreator = { spec -> col.addDiscoverNote(spec) },
+            noteCreator = TestCollectionNoteCreator { col },
             pendingApprovals = InMemoryPendingApprovalStore(),
         )
 
@@ -99,6 +99,77 @@ class DiscoverViewModelTest : JvmTest() {
 
             val message = assertIs<DiscoverMessage.Error>(vm.uiState.value.message)
             assertEquals(DiscoverError.Kind.ServiceUnavailable, message.error.kind)
+        }
+
+    @Test
+    fun `process errors are told apart by their code`() =
+        runTest {
+            val vm = viewModel()
+
+            fun kindAfter(error: DiscoverApiException): DiscoverError.Kind {
+                api.processError = error
+                vm.processSource(3)
+                return assertIs<DiscoverMessage.Error>(vm.uiState.value.message).error.kind
+            }
+
+            assertEquals(DiscoverError.Kind.DoubleTap, kindAfter(DiscoverApiException.Conflict("x", DiscoverErrorCode.DOUBLE_TAP)))
+            assertEquals(
+                DiscoverError.Kind.SourceNotQueued,
+                kindAfter(DiscoverApiException.Conflict("x", DiscoverErrorCode.SOURCE_NOT_QUEUED)),
+            )
+            assertEquals(
+                DiscoverError.Kind.RoutineNotConfigured,
+                kindAfter(DiscoverApiException.ServiceUnavailable("x", DiscoverErrorCode.ROUTINE_NOT_CONFIGURED)),
+            )
+            assertEquals(
+                DiscoverError.Kind.RoutineFailed,
+                kindAfter(DiscoverApiException.Http(502, "upstream", DiscoverErrorCode.ROUTINE_FAILED)),
+            )
+            assertEquals(DiscoverError.Kind.Conflict, kindAfter(DiscoverApiException.Conflict("zonder code")))
+        }
+
+    @Test
+    fun `a refused yes shows the unlinked note, moves on and is listed until dismissed`() =
+        runTest {
+            val vm = viewModel()
+            vm.onShown()
+            vm.openLesson(
+                vm.uiState.value.overview.lessons
+                    .single(),
+            )
+            vm.startReview()
+
+            api.decideError = DiscoverApiException.Conflict("ander note-id", DiscoverErrorCode.NOTE_ID_MISMATCH)
+            vm.approve()
+
+            val noteId = col.findNotes("tag:les::habit-stacking").single()
+            assertEquals(DiscoverMessage.Orphaned(noteId, OrphanReason.NOTE_ID_MISMATCH), vm.uiState.value.message)
+            assertEquals(
+                1,
+                vm.uiState.value.lesson!!
+                    .reviewIndex,
+            )
+
+            api.decideError = null
+            vm.back()
+            assertEquals(
+                listOf(noteId),
+                vm.uiState.value.overview.orphans
+                    .map { it.noteId },
+            )
+            assertEquals(0, vm.uiState.value.overview.pendingApprovals)
+
+            vm.dismissOrphan(11)
+            assertTrue(
+                vm.uiState.value.overview.orphans
+                    .isEmpty(),
+            )
+            vm.refresh()
+            assertTrue(
+                vm.uiState.value.overview.orphans
+                    .isEmpty(),
+            )
+            assertEquals("the note stays in Anki", 1, col.noteCount())
         }
 
     @Test
@@ -221,6 +292,7 @@ private class MemorySettings : DiscoverSettings {
 /** A [DiscoverApi] with one lesson (proposals 11 and 12) and two sources. */
 private class ScriptedDiscoverApi : DiscoverApi {
     var failWith: DiscoverApiException? = null
+    var decideError: DiscoverApiException? = null
     var processError: DiscoverApiException? = null
     var processGate: CompletableDeferred<Unit>? = null
     var processCalls = 0
@@ -264,6 +336,7 @@ private class ScriptedDiscoverApi : DiscoverApi {
         request: DecisionRequest,
     ): Proposal {
         check()
+        decideError?.let { throw it }
         decisions.add(proposalId to request)
         val status = if (request.decision == "ja") ProposalStatus.APPROVED else ProposalStatus.REJECTED
         return basicProposal(id = proposalId).copy(status = status)

@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.IOException
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -82,7 +83,7 @@ class DiscoverNoteCreationTest : JvmTest() {
         runTest {
             val api = FakeDiscoverApi()
             val decisions =
-                ProposalDecisions(api, { spec -> col.addDiscoverNote(spec) }, InMemoryPendingApprovalStore())
+                ProposalDecisions(api, TestCollectionNoteCreator { col }, InMemoryPendingApprovalStore())
             val proposal = basicProposal()
 
             api.failWith = DiscoverApiException.Network(IOException("offline"))
@@ -94,6 +95,39 @@ class DiscoverNoteCreationTest : JvmTest() {
             val noteId = col.findNotes("tag:les::embeddings").single()
             assertEquals(
                 noteId,
+                api.decisions
+                    .single()
+                    .second.ankiNoteId,
+            )
+        }
+
+    @Test
+    fun `find returns the note with the same lesson tag, notetype and fields`() {
+        val created = assertIs<NoteCreationResult.Created>(col.addDiscoverNote(spec()))
+
+        assertEquals(created.noteId, col.findDiscoverNote(spec()))
+        assertNull(col.findDiscoverNote(spec(fields = mapOf("Front" to "anders", "Back" to "Een vector."))))
+        assertNull(col.findDiscoverNote(spec(tags = listOf("brainiac", "les::andere-les"))))
+        assertNull(col.findDiscoverNote(spec(notetype = "Brainiac Toepassing")))
+    }
+
+    @Test
+    fun `an app death right after adding the note does not lead to a second note`() =
+        runTest {
+            val api = FakeDiscoverApi()
+            val creator = TestCollectionNoteCreator { col }
+            val decisions = ProposalDecisions(api, creator, InMemoryPendingApprovalStore())
+
+            creator.dieAfterCreate = true
+            assertFailsWith<SimulatedAppDeath> { decisions.approve("embeddings", basicProposal()) }
+            assertEquals(1, col.noteCount())
+
+            creator.dieAfterCreate = false
+            assertIs<DecisionOutcome.Decided>(decisions.approve("embeddings", basicProposal()))
+
+            assertEquals(1, col.noteCount())
+            assertEquals(
+                col.findNotes("tag:les::embeddings").single(),
                 api.decisions
                     .single()
                     .second.ankiNoteId,

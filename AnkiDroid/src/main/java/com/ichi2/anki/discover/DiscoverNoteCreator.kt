@@ -31,13 +31,18 @@ sealed interface NoteCreationResult {
     ) : NoteCreationResult
 }
 
-fun interface DiscoverNoteCreator {
+interface DiscoverNoteCreator {
     suspend fun create(spec: NoteSpec): NoteCreationResult
+
+    /** A note that matches [spec] exactly (lesson tag, notetype, fields), or null. */
+    suspend fun find(spec: NoteSpec): NoteId?
 }
 
 /** Adds notes to the open collection. */
 object CollectionDiscoverNoteCreator : DiscoverNoteCreator {
     override suspend fun create(spec: NoteSpec): NoteCreationResult = withCol { addDiscoverNote(spec) }
+
+    override suspend fun find(spec: NoteSpec): NoteId? = withCol { findDiscoverNote(spec) }
 }
 
 /** The `les::` tag that links a note to its lesson in the Brainiac service. */
@@ -67,4 +72,20 @@ fun Collection.addDiscoverNote(spec: NoteSpec): NoteCreationResult {
             .toMutableList()
     addNote(note, deckId)
     return NoteCreationResult.Created(note.id)
+}
+
+/**
+ * Finds the note [addDiscoverNote] would have created for [spec]: same `les::` tag, notetype and
+ * field contents. Used to recover from an app death between creating a note and storing its id.
+ */
+fun Collection.findDiscoverNote(spec: NoteSpec): NoteId? {
+    val notetype = notetypes.byName(spec.notetype) ?: return null
+    val tag = spec.tags.firstOrNull { it.startsWith("les::") } ?: return null
+    val expected = notetype.fieldsNames.map { spec.fields[it].orEmpty() }
+    return findNotes("\"tag:$tag\"")
+        .sortedDescending()
+        .firstOrNull { id ->
+            val note = getNote(id)
+            note.noteTypeId == notetype.id && note.fields == expected
+        }
 }
