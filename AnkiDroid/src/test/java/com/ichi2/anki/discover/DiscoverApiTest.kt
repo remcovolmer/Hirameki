@@ -189,7 +189,7 @@ class DiscoverApiTest {
                 assertFailsWith<DiscoverApiException.InvalidRequest> { api().decide(1, DecisionRequest.feedback("x")) }.detail,
             )
             val upstream = assertFailsWith<DiscoverApiException.Http> { api().process(1) }
-            assertEquals(502, upstream.code)
+            assertEquals(502, upstream.status)
             assertEquals("upstream down", upstream.detail)
         }
 
@@ -198,7 +198,7 @@ class DiscoverApiTest {
         runTest {
             server.on("GET", "/api/v1/sources", 500, "<html>Internal Server Error</html>")
             val e = assertFailsWith<DiscoverApiException.Http> { api().sources() }
-            assertEquals(500, e.code)
+            assertEquals(500, e.status)
             assertNull(e.detail)
         }
 
@@ -214,6 +214,40 @@ class DiscoverApiTest {
         runTest {
             server.on("GET", "/api/v1/lessons", 200, """{"lessons": "not a list"}""")
             assertFailsWith<DiscoverApiException.InvalidResponse> { api().openLessons() }
+        }
+
+    @Test
+    fun `error codes are read so the two 409s on process can be told apart`() =
+        runTest {
+            server.on("POST", "/api/v1/sources/3/process", 409, """{"detail": "al gestart", "code": "double_tap"}""")
+            server.on("POST", "/api/v1/sources/4/process", 409, """{"detail": "niet in wachtrij", "code": "source_not_queued"}""")
+            server.on("POST", "/api/v1/sources/5/process", 503, """{"detail": "x", "code": "routine_not_configured"}""")
+            server.on("POST", "/api/v1/sources/6/process", 502, """{"detail": "boom", "code": "routine_failed"}""")
+            server.on("POST", "/api/v1/proposals/11/decision", 409, """{"detail": "ander note-id", "code": "note_id_mismatch"}""")
+
+            assertEquals(DiscoverErrorCode.DOUBLE_TAP, assertFailsWith<DiscoverApiException.Conflict> { api().process(3) }.errorCode)
+            assertEquals(DiscoverErrorCode.SOURCE_NOT_QUEUED, assertFailsWith<DiscoverApiException.Conflict> { api().process(4) }.errorCode)
+            assertEquals(
+                DiscoverErrorCode.ROUTINE_NOT_CONFIGURED,
+                assertFailsWith<DiscoverApiException.ServiceUnavailable> { api().process(5) }.errorCode,
+            )
+            assertEquals(DiscoverErrorCode.ROUTINE_FAILED, assertFailsWith<DiscoverApiException.Http> { api().process(6) }.errorCode)
+            assertEquals(
+                DiscoverErrorCode.NOTE_ID_MISMATCH,
+                assertFailsWith<DiscoverApiException.Conflict> { api().decide(11, DecisionRequest.approve(1, null)) }.errorCode,
+            )
+        }
+
+    @Test
+    fun `a missing or unknown code falls back to the status`() =
+        runTest {
+            server.on("POST", "/api/v1/sources/3/process", 409, """{"detail": "oud formaat"}""")
+            server.on("POST", "/api/v1/sources/4/process", 409, """{"detail": "nieuw", "code": "something_new"}""")
+
+            val old = assertFailsWith<DiscoverApiException.Conflict> { api().process(3) }
+            assertNull(old.errorCode)
+            assertEquals("oud formaat", old.detail)
+            assertNull(assertFailsWith<DiscoverApiException.Conflict> { api().process(4) }.errorCode)
         }
 
     @Test

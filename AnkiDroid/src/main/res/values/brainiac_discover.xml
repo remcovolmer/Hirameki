@@ -34,6 +34,16 @@
     <string name="discover_error_conflict">Already done: %s</string>
     <string name="discover_error_conflict_generic">This was already done a moment ago.</string>
     <string name="discover_error_unavailable">Processing is not available: the routine is not configured on the server (503).</string>
+    <string name="discover_error_service_unavailable">The Brainiac server is temporarily unavailable (503).</string>
+    <string name="discover_error_double_tap">Processing of this title was already started in the last 10 minutes.</string>
+    <string name="discover_error_source_not_queued">This title is no longer in the queue.</string>
+    <string name="discover_error_routine_failed">Starting the routine failed: %s</string>
+    <string name="discover_error_proposal_not_new">This card was already decided elsewhere.</string>
+    <string name="discover_orphaned">The server refused this card (%1$s). Note %2$d is in your collection without a link to Brainiac. Delete it in the card browser if you do not want it.</string>
+    <string name="discover_orphan_reason_not_new">already decided elsewhere</string>
+    <string name="discover_orphan_reason_mismatch">already approved with another note</string>
+    <string name="discover_orphan_reason_not_found">the card no longer exists</string>
+    <string name="discover_orphan_dismiss">Mark as seen</string>
     <string name="discover_error_server">Server error: %s</string>
 
     <!-- Settings -->

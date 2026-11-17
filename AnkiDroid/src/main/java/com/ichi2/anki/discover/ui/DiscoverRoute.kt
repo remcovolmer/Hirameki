@@ -108,6 +108,7 @@ fun DiscoverRoute(
                     onAddSource = viewModel::addSource,
                     onRetry = viewModel::refresh,
                     onOpenSettings = viewModel::openSettings,
+                    onDismissOrphan = viewModel::dismissOrphan,
                 )
             DiscoverPage.Settings ->
                 DiscoverSettingsScreen(

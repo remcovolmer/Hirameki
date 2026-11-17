@@ -246,4 +246,5 @@ internal data class SourcesResponse(
 @Serializable
 internal data class ErrorResponse(
     val detail: String? = null,
+    val code: String? = null,
 )

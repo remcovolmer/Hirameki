@@ -8,6 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
@@ -18,12 +19,20 @@ class ProposalDecisionsTest {
     private val created = mutableListOf<NoteSpec>()
     private var nextNoteId = 1000L
     private var creatorResult: ((NoteSpec) -> NoteCreationResult)? = null
+
+    /** Simulates the app dying right after the note was created, before its id is stored. */
+    private var dieAfterCreate = false
     private val creator =
-        DiscoverNoteCreator { spec ->
-            creatorResult?.invoke(spec) ?: run {
-                created.add(spec)
-                NoteCreationResult.Created(nextNoteId++)
-            }
+        object : DiscoverNoteCreator {
+            override suspend fun create(spec: NoteSpec): NoteCreationResult =
+                creatorResult?.invoke(spec) ?: run {
+                    created.add(spec)
+                    val result = NoteCreationResult.Created(nextNoteId++)
+                    if (dieAfterCreate) throw AppDied()
+                    result
+                }
+
+            override suspend fun find(spec: NoteSpec): Long? = created.indexOfLast { it == spec }.takeIf { it >= 0 }?.let { 1000L + it }
         }
     private val decisions = ProposalDecisions(api, creator, pending)
 
@@ -126,22 +135,95 @@ class ProposalDecisionsTest {
             assertEquals(2, pending.all().size)
 
             api.failWith = null
-            val remaining = decisions.reportPendingApprovals()
+            val report = decisions.reportPendingApprovals()
 
-            assertEquals(0, remaining)
+            assertEquals(0, report.waiting)
             assertEquals(2, created.size)
             assertEquals(setOf(1000L, 1001L), api.decisions.mapNotNull { it.second.ankiNoteId }.toSet())
         }
 
     @Test
-    fun `a conflict on the report means it was decided already, the link is dropped`() =
+    fun `a lost response is reported again and the idempotent 200 completes it`() =
         runTest {
-            api.failWith = DiscoverApiException.Conflict("status is goedgekeurd")
+            // the service stored the yes, but the response never arrived
+            api.failAfterRecording = DiscoverApiException.Network(IOException("connection reset"))
+            assertIs<DecisionOutcome.SavedLocally>(decisions.approve("embeddings", basicProposal()))
+
+            api.failAfterRecording = null
+            assertIs<DecisionOutcome.Decided>(decisions.approve("embeddings", basicProposal()))
+
+            assertEquals(1, created.size)
+            assertEquals(listOf(1000L, 1000L), api.decisions.map { it.second.ankiNoteId })
+            assertNull(pending.get(11))
+        }
+
+    @Test
+    fun `a 409 after creating the note orphans it and stops retrying`() =
+        runTest {
+            api.failWith = DiscoverApiException.Conflict("status is afgewezen", DiscoverErrorCode.PROPOSAL_NOT_NEW)
 
             val outcome = decisions.approve("embeddings", basicProposal())
 
-            assertEquals(DecisionOutcome.AlreadyDecided("status is goedgekeurd"), outcome)
+            assertEquals(DecisionOutcome.Orphaned(1000, OrphanReason.PROPOSAL_NOT_NEW), outcome)
+            val report = decisions.reportPendingApprovals()
+            assertEquals(0, report.waiting)
+            assertEquals(listOf(1000L), report.orphans.map { it.noteId })
+
+            api.failWith = null
+            assertEquals(DecisionOutcome.Orphaned(1000, OrphanReason.PROPOSAL_NOT_NEW), decisions.approve("embeddings", basicProposal()))
+            assertTrue("never reported again", api.decisions.isEmpty())
+            assertEquals("no second note", 1, created.size)
+
+            decisions.dismissOrphan(11)
             assertNull(pending.get(11))
+        }
+
+    @Test
+    fun `note id mismatch and 404 are orphans with their own reason`() =
+        runTest {
+            api.failWith = DiscoverApiException.Conflict("ander id", DiscoverErrorCode.NOTE_ID_MISMATCH)
+            assertEquals(DecisionOutcome.Orphaned(1000, OrphanReason.NOTE_ID_MISMATCH), decisions.approve("x", basicProposal(id = 11)))
+
+            api.failWith = DiscoverApiException.NotFound("weg", DiscoverErrorCode.NOT_FOUND)
+            assertEquals(DecisionOutcome.Orphaned(1001, OrphanReason.NOT_FOUND), decisions.approve("x", basicProposal(id = 12)))
+
+            api.failWith = DiscoverApiException.Conflict("oud formaat zonder code")
+            assertEquals(DecisionOutcome.Orphaned(1002, OrphanReason.PROPOSAL_NOT_NEW), decisions.approve("x", basicProposal(id = 13)))
+        }
+
+    @Test
+    fun `an app death between creating the note and storing its id does not create a second note`() =
+        runTest {
+            val edited = mapOf("Front" to "eigen versie", "Back" to "B")
+            dieAfterCreate = true
+            assertFailsWith<AppDied> { decisions.approve("embeddings", basicProposal(), edited) }
+            assertEquals(PendingApproval(11, noteId = null, editedFields = edited), pending.get(11))
+
+            dieAfterCreate = false
+            assertIs<DecisionOutcome.Decided>(decisions.approve("embeddings", basicProposal()))
+
+            assertEquals("found, not created again", 1, created.size)
+            val request = api.decisions.single().second
+            assertEquals(1000L, request.ankiNoteId)
+            assertEquals(edited, request.fields)
+        }
+
+    @Test
+    fun `a marker whose note was never created leads to a normal create`() =
+        runTest {
+            pending.put(PendingApproval(11, noteId = null))
+
+            assertIs<DecisionOutcome.Decided>(decisions.approve("embeddings", basicProposal()))
+
+            assertEquals(1, created.size)
+        }
+
+    @Test
+    fun `feedback or no on a proposal that is no longer new is already decided`() =
+        runTest {
+            api.failWith = DiscoverApiException.Conflict("status is goedgekeurd", DiscoverErrorCode.PROPOSAL_NOT_NEW)
+
+            assertEquals(DecisionOutcome.AlreadyDecided("status is goedgekeurd"), decisions.feedback(basicProposal(), "x"))
         }
 
     @Test
@@ -153,7 +235,7 @@ class ProposalDecisionsTest {
 
             assertEquals(DecisionOutcome.MissingNotetype("Brainiac Toepassing"), outcome)
             assertTrue(api.decisions.isEmpty())
-            assertTrue(pending.all().isEmpty())
+            assertTrue("marker removed again", pending.all().isEmpty())
         }
 
     @Test
@@ -205,9 +287,14 @@ class ProposalDecisionsTest {
         }
 }
 
+private class AppDied : RuntimeException("simulated process death")
+
 class FakeDiscoverApi : DiscoverApi {
     val decisions = mutableListOf<Pair<Long, DecisionRequest>>()
     var failWith: DiscoverApiException? = null
+
+    /** The service handles the request, but the response is lost. */
+    var failAfterRecording: DiscoverApiException? = null
 
     override suspend fun decide(
         proposalId: Long,
@@ -215,6 +302,7 @@ class FakeDiscoverApi : DiscoverApi {
     ): Proposal {
         failWith?.let { throw it }
         decisions.add(proposalId to request)
+        failAfterRecording?.let { throw it }
         val status =
             when (request.decision) {
                 "ja" -> ProposalStatus.APPROVED

@@ -67,12 +67,40 @@ data class DiscoverConfig(
     }
 }
 
-/** Every failure of a [DiscoverApi] call. [detail] is the service's `detail` message, if any. */
+/**
+ * The `code` of an error response. The app decides on this, not on the HTTP status or the text of
+ * `detail`; an unknown or missing code falls back to the HTTP status.
+ */
+enum class DiscoverErrorCode(
+    val apiValue: String,
+) {
+    UNAUTHORIZED("unauthorized"),
+    NOT_FOUND("not_found"),
+    INVALID("invalid"),
+    PROPOSAL_NOT_NEW("proposal_not_new"),
+    NOTE_ID_MISMATCH("note_id_mismatch"),
+    SOURCE_NOT_QUEUED("source_not_queued"),
+    DOUBLE_TAP("double_tap"),
+    ROUTINE_NOT_CONFIGURED("routine_not_configured"),
+    ROUTINE_FAILED("routine_failed"),
+    INTERNAL("internal"),
+    ;
+
+    companion object {
+        fun fromApi(value: String?): DiscoverErrorCode? = entries.firstOrNull { it.apiValue == value }
+    }
+}
+
+/**
+ * Every failure of a [DiscoverApi] call. [detail] and [errorCode] come from the service's error
+ * body, if it had one.
+ */
 sealed class DiscoverApiException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause) {
     open val detail: String? get() = null
+    open val errorCode: DiscoverErrorCode? get() = null
 
     /** The server could not be reached (offline, DNS, timeout). */
     class Network(
@@ -80,33 +108,41 @@ sealed class DiscoverApiException(
     ) : DiscoverApiException("network error: ${cause.message}", cause)
 
     /** 401: token missing or wrong. */
-    class Unauthorized : DiscoverApiException("unauthorized")
+    class Unauthorized(
+        override val detail: String? = null,
+        override val errorCode: DiscoverErrorCode? = null,
+    ) : DiscoverApiException("unauthorized")
 
     /** 404 */
     class NotFound(
         override val detail: String?,
+        override val errorCode: DiscoverErrorCode? = null,
     ) : DiscoverApiException("not found: $detail")
 
-    /** 409: e.g. a decision on a proposal that is no longer `nieuw`, or a double tap on "process". */
+    /** 409: see [errorCode] for which conflict. */
     class Conflict(
         override val detail: String?,
-    ) : DiscoverApiException("conflict: $detail")
+        override val errorCode: DiscoverErrorCode? = null,
+    ) : DiscoverApiException("conflict ($errorCode): $detail")
 
     /** 422: the service rejected the request body. */
     class InvalidRequest(
         override val detail: String?,
+        override val errorCode: DiscoverErrorCode? = null,
     ) : DiscoverApiException("invalid request: $detail")
 
     /** 503: e.g. the routine trigger is not configured on the server. */
     class ServiceUnavailable(
         override val detail: String?,
-    ) : DiscoverApiException("service unavailable: $detail")
+        override val errorCode: DiscoverErrorCode? = null,
+    ) : DiscoverApiException("service unavailable ($errorCode): $detail")
 
     /** Any other non-2xx status, including 502 from the routine trigger. */
     class Http(
-        val code: Int,
+        val status: Int,
         override val detail: String?,
-    ) : DiscoverApiException("HTTP $code: $detail")
+        override val errorCode: DiscoverErrorCode? = null,
+    ) : DiscoverApiException("HTTP $status ($errorCode): $detail")
 
     /** The response body was not the JSON the contract describes. */
     class InvalidResponse(
@@ -183,26 +219,28 @@ class OkHttpDiscoverApi(
         }
 
     private fun errorFor(
-        code: Int,
+        status: Int,
         body: String,
     ): DiscoverApiException {
-        val detail =
+        val error =
             try {
-                discoverJson.decodeFromString(ErrorResponse.serializer(), body).detail
+                discoverJson.decodeFromString(ErrorResponse.serializer(), body)
             } catch (e: SerializationException) {
                 Timber.d(e, "Discover: error body is not JSON")
-                null
+                ErrorResponse()
             } catch (e: IllegalArgumentException) {
                 Timber.d(e, "Discover: error body is not JSON")
-                null
+                ErrorResponse()
             }
-        return when (code) {
-            401 -> DiscoverApiException.Unauthorized()
-            404 -> DiscoverApiException.NotFound(detail)
-            409 -> DiscoverApiException.Conflict(detail)
-            422 -> DiscoverApiException.InvalidRequest(detail)
-            503 -> DiscoverApiException.ServiceUnavailable(detail)
-            else -> DiscoverApiException.Http(code, detail)
+        val detail = error.detail
+        val code = DiscoverErrorCode.fromApi(error.code)
+        return when (status) {
+            401 -> DiscoverApiException.Unauthorized(detail, code)
+            404 -> DiscoverApiException.NotFound(detail, code)
+            409 -> DiscoverApiException.Conflict(detail, code)
+            422 -> DiscoverApiException.InvalidRequest(detail, code)
+            503 -> DiscoverApiException.ServiceUnavailable(detail, code)
+            else -> DiscoverApiException.Http(status, detail, code)
         }
     }
 
