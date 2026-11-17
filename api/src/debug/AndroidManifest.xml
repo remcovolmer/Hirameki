@@ -6,13 +6,13 @@
     <!--
     In AnkiDroid/AndroidManifest.xml 'applicationId' defines the permission/authority for the API
 
-    (com.hirameki.flashcards.permission.xxx)       - live    (release)
-    (com.hirameki.flashcards.debug.permission.xxx) - disabled (debug)
+    (${brainiacApplicationId}.permission.xxx)       - live    (release)
+    (${brainiacApplicationId}.debug.permission.xxx) - disabled (debug)
 
     This caused a problem with integration test builds (androidTest)
     These run under '.debug', but require a working API where we can test permissions
 
-    We need <uses-permission> to grant 'com.hirameki.flashcards.debug.permission.READ_WRITE_DATABASE'
+    We need <uses-permission> to grant '${brainiacApplicationId}.debug.permission.READ_WRITE_DATABASE'
 
     The permission should not be in a 'release' build.
     We can't define an 'androidTest' only manifest:
@@ -20,5 +20,5 @@
 
     So this exists in a 'debug' manifest, which is used by androidTest
     -->
-    <uses-permission android:name="com.hirameki.flashcards.debug.permission.READ_WRITE_DATABASE"/>
+    <uses-permission android:name="${brainiacApplicationId}.debug.permission.READ_WRITE_DATABASE"/>
 </manifest>

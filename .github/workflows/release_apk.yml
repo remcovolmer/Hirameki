@@ -2,6 +2,9 @@
 
 name: 📦 Build & Release APK
 
+# brainiac fork: tags are brainiac-v<brainiacVersionName> (AnkiDroid/build.gradle.kts), so they never collide with
+# upstream v* tags, and the apks are named Brainiac-*. bump brainiacVersionName, commit, tag brainiac-v<name>, push the tag
+
 # builds signed apks and publishes them as a github release you can download.
 # start it from the actions tab ("run workflow"), or push a tag such as v1.2.0.
 # one-time setup of the signing secrets: README.md, "Build Your Own APK".
@@ -10,17 +13,17 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag. Leave empty to use v + baseVersionName from AnkiDroid/build.gradle.kts"
+        description: "Release tag. Leave empty to use brainiac-v + brainiacVersionName from AnkiDroid/build.gradle.kts"
         required: false
         type: string
   push:
     tags:
-      - "v*"
+      - "brainiac-v*"
 
 # queue runs instead of cancelling them, one group per tag: a run waiting behind another is cancelled as soon as a
 # third joins its group, so with every tag in one group, pushing two tags in a row could leave the first one with
 # no release at all. the group can only name the tag the run was started with, so a manual run that leaves the tag
-# empty groups under its branch while the tag it resolves to (v + baseVersionName) groups under that tag: those two
+# empty groups under its branch while the tag it resolves to (brainiac-v + brainiacVersionName) groups under that tag: those two
 # do not serialise. both still stop at the "release already exists" check or at `gh release create`, so the worst
 # case is one wasted build, never two releases for one tag
 concurrency:
@@ -54,9 +57,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_TAG: ${{ inputs.tag }}
         run: |
-          version=$(sed -nE 's/^[[:space:]]*val[[:space:]]+baseVersionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' AnkiDroid/build.gradle.kts | head -n 1)
+          version=$(sed -nE 's/^[[:space:]]*val[[:space:]]+brainiacVersionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' AnkiDroid/build.gradle.kts | head -n 1)
           if [ -z "$version" ]; then
-            echo "::error::could not read baseVersionName from AnkiDroid/build.gradle.kts"
+            echo "::error::could not read brainiacVersionName from AnkiDroid/build.gradle.kts"
             exit 1
           fi
 
@@ -65,14 +68,14 @@ jobs:
             if [ -n "$INPUT_TAG" ] && [ "$INPUT_TAG" != "$tag" ]; then
               echo "::warning::run started on tag $tag, so the tag input '$INPUT_TAG' is ignored"
             fi
-            # the apks carry baseVersionName and baseVersionCode whatever the tag says, so another tag would
+            # the apks carry brainiacVersionName and the versionCode derived from it whatever the tag says, so another tag would
             # publish a release labelled with a version nothing was built from, at a versionCode already released
-            if [ "$tag" != "v$version" ]; then
-              echo "::error::tag $tag does not match baseVersionName $version in AnkiDroid/build.gradle.kts (expected v$version). bump baseVersionName and baseVersionCode there, then tag the new commit"
+            if [ "$tag" != "brainiac-v$version" ]; then
+              echo "::error::tag $tag does not match brainiacVersionName $version in AnkiDroid/build.gradle.kts (expected brainiac-v$version). bump brainiacVersionName there, then tag the new commit"
               exit 1
             fi
           else
-            tag=${INPUT_TAG:-v$version}
+            tag=${INPUT_TAG:-brainiac-v$version}
           fi
           if ! [[ $tag =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
             echo "::error::invalid tag '$tag': use letters, digits and . _ + - only"
@@ -91,7 +94,7 @@ jobs:
           case $status in
             404) ;;
             200)
-              echo "::error::release $tag already exists. bump baseVersionName in AnkiDroid/build.gradle.kts, enter another tag when starting the run, or delete that release"
+              echo "::error::release $tag already exists. bump brainiacVersionName in AnkiDroid/build.gradle.kts, enter another tag when starting the run, or delete that release"
               exit 1
               ;;
             *)
@@ -288,9 +291,9 @@ jobs:
                 exit 1
               fi
               "$apksigner" verify "$out/$file" # fails on an unsigned apk
-              cp "$out/$file" "dist/Hirameki-$VERSION-$abi.apk"
+              cp "$out/$file" "dist/Brainiac-$VERSION-$abi.apk"
             done
-          if [ ! -f "dist/Hirameki-$VERSION-universal.apk" ]; then
+          if [ ! -f "dist/Brainiac-$VERSION-universal.apk" ]; then
             echo "::error::no universal apk was built"
             exit 1
           fi
@@ -299,7 +302,7 @@ jobs:
           mapping=AnkiDroid/build/outputs/mapping/fullRelease/mapping.txt
           if [ -f "$mapping" ]; then
             # gzipped: the raw file is larger than every apk together, and r8's retrace reads it compressed
-            gzip -9 -c "$mapping" > "dist/Hirameki-$VERSION-mapping.txt.gz"
+            gzip -9 -c "$mapping" > "dist/Brainiac-$VERSION-mapping.txt.gz"
           else
             echo "::warning::no r8 mapping at $mapping: crash traces from these apks cannot be deobfuscated"
           fi
@@ -343,7 +346,7 @@ jobs:
         run: |
           assets=()
           for apk in dist/*.apk; do
-            abi=${apk#"dist/Hirameki-$VERSION-"}
+            abi=${apk#"dist/Brainiac-$VERSION-"}
             abi=${abi%.apk}
             case $abi in
               universal) label="Universal APK (any device)" ;;
@@ -352,19 +355,19 @@ jobs:
             esac
             assets+=("$apk#$label")
           done
-          mapping=dist/Hirameki-$VERSION-mapping.txt.gz
+          mapping=dist/Brainiac-$VERSION-mapping.txt.gz
           if [ -f "$mapping" ]; then
             assets+=("$mapping#R8 mapping file, gzipped (turns a crash trace from these APKs back into readable names)")
           fi
 
           cat > "$RUNNER_TEMP/notes.md" <<EOF
-          Hirameki $VERSION, built from $GITHUB_SHA.
+          Brainiac $VERSION, built from $GITHUB_SHA.
 
           **Which APK?** If unsure, take **universal**: it runs on every device. **arm64-v8a** is smaller and fits almost every current phone.
 
           Pick one kind and stay on it: the universal APK's version code is lower than every per-ABI one, so Android refuses to install it over an arm64-v8a build. Switching kinds means uninstalling first, after syncing or backing up your collection.
 
-          This build is signed with this repository's own key, so Android will not install it over the Google Play version. Uninstall that first, after syncing or backing up your collection.
+          Brainiac has its own application id (nl.remcovolmer.brainiac) and signing key, so it installs next to Hirameki from Google Play and every later Brainiac release installs over it.
           EOF
 
           # a folded list of the commit titles since the last release, so the notes say what changed without
@@ -390,5 +393,5 @@ jobs:
           fi
 
           # a tag created with github.token triggers no workflows, so this starts no second run
-          url=$(gh release create "$TAG" "${assets[@]}" --target "$GITHUB_SHA" --title "Hirameki $VERSION" --notes-file "$RUNNER_TEMP/notes.md")
+          url=$(gh release create "$TAG" "${assets[@]}" --target "$GITHUB_SHA" --title "Brainiac $VERSION" --notes-file "$RUNNER_TEMP/notes.md")
           echo "Release: $url" >> "$GITHUB_STEP_SUMMARY"

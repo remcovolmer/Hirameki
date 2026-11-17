@@ -43,6 +43,36 @@ idea {
 val homePath: String? = System.getProperty("user.home")
 val baseVersionCode = 22300124
 val baseVersionName = "1.1.10"
+
+// brainiac fork: its own version line, so upstream bumps of baseVersion* above merge without conflicts and the
+// fork's releases still climb. release_apk.yml reads brainiacVersionName and expects the tag brainiac-v<name>.
+// the versionCode follows from the name (major * 1_000_000 + minor * 1_000 + patch), so bumping the name is enough;
+// keep major below 100 and minor and patch below 1000, which keeps it under the per-abi offset of 100_000_000 below
+val brainiacVersionName = "0.1.0"
+val brainiacVersionCode =
+    brainiacVersionName
+        .split(".")
+        .map { it.toInt() }
+        .let { (major, minor, patch) ->
+            require(major < 100 && minor < 1000 && patch < 1000) {
+                "brainiacVersionName $brainiacVersionName is out of range"
+            }
+            major * 1_000_000 + minor * 1_000 + patch
+        }
+
+// set in gradle.properties, which the api module reads too: the content provider's authority and permission follow it
+val brainiacApplicationId = providers.gradleProperty("brainiacApplicationId").get()
+
+// signing key for local release builds, so a local apk installs over a ci one. ci sets KEYSTOREPATH and friends
+// (release_apk.yml); locally the key comes from a properties file outside the repo, by default
+// ~/.brainiac/keystore/signing.properties (keys: keystore.path, keystore.password, key.alias, key.password),
+// or the file named by the gradle property brainiacSigningProperties
+val brainiacSigning: Properties? =
+    File(
+        providers.gradleProperty("brainiacSigningProperties").orNull
+            ?: "${homePath ?: ""}/.brainiac/keystore/signing.properties",
+    ).takeIf { it.isFile }
+        ?.let { file -> Properties().apply { file.inputStream().use { load(it) } } }
 val testReleaseBuild =
     rootProject.extra.has("testReleaseBuild") && (rootProject.extra.get("testReleaseBuild") as? Boolean) == true
 
@@ -196,17 +226,17 @@ extensions.configure<ApplicationExtension> {
     }
 
     defaultConfig {
-        applicationId = "com.hirameki.flashcards"
+        applicationId = brainiacApplicationId
         buildConfigField("Boolean", "CI", (System.getenv("CI") == "true").toString())
         buildConfigField("String", "ACRA_URL", "\"\"")
         buildConfigField("String", "BACKEND_VERSION", "\"${libs.versions.ankiBackend.get()}\"")
         buildConfigField("Boolean", "ENABLE_LEAK_CANARY", "false")
         buildConfigField("String", "GIT_COMMIT_HASH", "\"${gitCommitHash()}\"")
         buildConfigField("long", "BUILD_TIME", "${buildTime()}L")
-        resValue("string", "app_name", "Hirameki")
+        resValue("string", "app_name", "Brainiac")
 
-        versionCode = baseVersionCode
-        versionName = baseVersionName
+        versionCode = brainiacVersionCode
+        versionName = brainiacVersionName
         minSdk =
             libs.versions.minSdk
                 .get()
@@ -228,6 +258,11 @@ extensions.configure<ApplicationExtension> {
                 storePassword = System.getenv("KEYSTOREPWD") ?: System.getenv("KSTOREPWD")
                 keyAlias = System.getenv("KEYALIAS")
                 keyPassword = System.getenv("KEYPWD")
+            } else if (brainiacSigning != null) {
+                storeFile = file(brainiacSigning.getProperty("keystore.path"))
+                storePassword = brainiacSigning.getProperty("keystore.password")
+                keyAlias = brainiacSigning.getProperty("key.alias")
+                keyPassword = brainiacSigning.getProperty("key.password")
             } else {
                 storeFile = rootProject.file("tools/fallback-release-keystore.jks")
                 storePassword = "Test@123"
@@ -386,7 +421,7 @@ extensions.configure<ApplicationAndroidComponentsExtension> {
                         mapOf("armeabi-v7a" to 1, "x86" to 2, "arm64-v8a" to 3, "x86_64" to 4)
                     val abiVersionCode = versionCodes[abi]
                     if (abiVersionCode != null) {
-                        output.versionCode.set(abiVersionCode * 100000000 + baseVersionCode)
+                        output.versionCode.set(abiVersionCode * 100000000 + brainiacVersionCode)
                     }
                 }
             }

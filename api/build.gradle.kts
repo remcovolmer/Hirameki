@@ -10,6 +10,10 @@ plugins {
     id("maven-publish")
 }
 
+// brainiac fork: the authority and permission follow the app's applicationId (gradle.properties), so the app's own
+// content provider matches the authority it is installed under
+val brainiacApplicationId = providers.gradleProperty("brainiacApplicationId").get()
+
 group = "com.ichi2.anki"
 version = "2.0.0"
 
@@ -29,12 +33,13 @@ extensions.configure<LibraryExtension> {
             libs.versions.minSdk
                 .get()
                 .toInt()
+        manifestPlaceholders["brainiacApplicationId"] = brainiacApplicationId
         buildConfigField(
             "String",
             "READ_WRITE_PERMISSION",
-            "\"com.hirameki.flashcards.permission.READ_WRITE_DATABASE\"",
+            "\"$brainiacApplicationId.permission.READ_WRITE_DATABASE\"",
         )
-        buildConfigField("String", "AUTHORITY", "\"com.hirameki.flashcards\"")
+        buildConfigField("String", "AUTHORITY", "\"$brainiacApplicationId\"")
     }
 
     buildTypes {
@@ -42,9 +47,9 @@ extensions.configure<LibraryExtension> {
             buildConfigField(
                 "String",
                 "READ_WRITE_PERMISSION",
-                "\"com.hirameki.flashcards.debug.permission.READ_WRITE_DATABASE\"",
+                "\"$brainiacApplicationId.debug.permission.READ_WRITE_DATABASE\"",
             )
-            buildConfigField("String", "AUTHORITY", "\"com.hirameki.flashcards.debug\"")
+            buildConfigField("String", "AUTHORITY", "\"$brainiacApplicationId.debug\"")
         }
         getByName("release") {
             isMinifyEnabled = false
