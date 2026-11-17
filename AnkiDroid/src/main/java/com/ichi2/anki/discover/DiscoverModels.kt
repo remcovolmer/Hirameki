@@ -94,6 +94,7 @@ data class LessonSummary(
     val track: String = "",
     val title: String,
     val subtitle: String? = null,
+    @SerialName("reading_minutes") val readingMinutes: Int? = null,
     val status: LessonStatus = LessonStatus.UNKNOWN,
     @SerialName("source_id") val sourceId: Long? = null,
     @SerialName("proposal_counts") val proposalCounts: ProposalCounts = ProposalCounts(),
@@ -104,8 +105,15 @@ data class LessonSummary(
 @Serializable
 data class LessonScreen(
     val heading: String? = null,
+    @Serializable(with = LessonBlockListSerializer::class)
+    val blocks: List<LessonBlock> = emptyList(),
+    /** v1: the whole screen as text. v2 servers still send it as a plain-text fallback. */
     val body: String = "",
-)
+) {
+    /** The blocks to show; a v1 screen (no blocks) becomes one text block. */
+    val displayBlocks: List<LessonBlock>
+        get() = blocks.ifEmpty { if (body.isBlank()) emptyList() else listOf(TextBlock(body)) }
+}
 
 @Serializable
 data class Citation(
@@ -121,6 +129,7 @@ data class Lesson(
     val track: String = "",
     val title: String,
     val subtitle: String? = null,
+    @SerialName("reading_minutes") val readingMinutes: Int? = null,
     val status: LessonStatus = LessonStatus.UNKNOWN,
     @SerialName("source_id") val sourceId: Long? = null,
     val screens: List<LessonScreen> = emptyList(),

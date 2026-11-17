@@ -178,6 +178,7 @@ private fun LessonCard(
             val toReview = lesson.proposalCounts.new
             val details =
                 listOfNotNull(
+                    lesson.readingMinutes?.let { pluralStringResource(R.plurals.discover_reading_minutes, it, it) },
                     if (lesson.status == LessonStatus.READ) stringResource(R.string.discover_lesson_read) else null,
                     if (toReview > 0) cardsToReviewText(toReview) else null,
                 )

@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import com.ichi2.anki.R
 import com.ichi2.anki.discover.Citation
 import com.ichi2.anki.discover.Lesson
-import com.ichi2.anki.discover.LessonScreen
 import com.ichi2.anki.discover.LessonState
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -74,22 +74,35 @@ private fun LessonPager(
     val pagerState = rememberPagerState(pageCount = { pageCount })
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
+        LinearProgressIndicator(
+            progress = { (pagerState.currentPage + 1f) / pageCount },
+            modifier = Modifier.fillMaxWidth(),
+        )
         HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
             val screen = lesson.screens.getOrNull(page)
             Column(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 if (page == 0) {
-                    lesson.subtitle?.let {
-                        Text(it.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    val meta =
+                        listOfNotNull(
+                            lesson.subtitle,
+                            lesson.readingMinutes?.let { pluralStringResource(R.plurals.discover_reading_minutes, it, it) },
+                        )
+                    if (meta.isNotEmpty()) {
+                        Text(
+                            meta.joinToString(" · ").uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
                 if (screen != null) {
-                    ScreenContent(screen)
+                    LessonScreenContent(screen)
                 } else {
                     CitationsContent(lesson.citations)
                 }
@@ -125,14 +138,6 @@ private fun LessonPager(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ScreenContent(screen: LessonScreen) {
-    screen.heading?.let { Text(it, style = MaterialTheme.typography.headlineSmall) }
-    lessonParagraphs(screen.body).forEach { paragraph ->
-        Text(boldMarkup(paragraph), style = MaterialTheme.typography.bodyLarge)
     }
 }
 

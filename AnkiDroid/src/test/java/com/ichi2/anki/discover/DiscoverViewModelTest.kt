@@ -311,7 +311,7 @@ private class ScriptedDiscoverApi : DiscoverApi {
             slug = "habit-stacking",
             title = "Habit stacking",
             status = LessonStatus.NEW,
-            screens = listOf(LessonScreen("Kop", "Tekst")),
+            screens = listOf(LessonScreen("Kop", body = "Tekst")),
             proposals = proposals,
         )
 
