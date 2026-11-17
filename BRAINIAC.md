@@ -28,6 +28,10 @@ The keystore and its passwords live outside every repository, in `~/.brainiac/ke
 with the same key. The repository secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`
 hold the same key for GitHub Actions.
 
+Keep the key alias (`release-key`) out of every tag and version string. GitHub masks secret values, and it drops
+a job output that contains one: with the alias `brainiac`, the tag `brainiac-v0.1.0` never reached the publish
+job and `gh release create` failed with an empty tag.
+
 A local release build picks the key up by itself when that file exists:
 
 ```
