@@ -17,6 +17,17 @@ release installs over the previous one (for example through Obtainium, which fol
 | `AnkiDroid/build.gradle.kts` | applicationId, app name, `brainiacVersionName` (versionCode follows from it), local signing from `~/.brainiac/keystore/signing.properties` |
 | `api/build.gradle.kts`, `api/src/*/AndroidManifest.xml` | content provider authority and permission follow the applicationId, so the app's own provider matches the authority it is installed under |
 | `.github/workflows/release_apk.yml` | tags `brainiac-v*`, version from `brainiacVersionName`, APKs named `Brainiac-*` |
+| `gradle.properties`, `AnkiDroid/build.gradle.kts` | `brainiacReleasesRepo` and the per-ABI versionCode map, passed to the in-app updater as BuildConfig fields; `BRAINIAC_UPDATER_ENABLED` is true only in the `full` flavor |
+| `AnkiDroid/src/full/AndroidManifest.xml` | `REQUEST_INSTALL_PACKAGES` and the install-result receiver of the updater, kept out of the `play` flavor |
+
+## In-app updater
+
+`com.ichi2.anki.brainiac.update` checks `GET /repos/<brainiacReleasesRepo>/releases/latest` (public API, no
+token, at most once a day plus a manual check), takes the APK of the installed kind (the versionCode tells:
+below 100_000_000 universal, otherwise ABI code * 100_000_000 + version), checks size, sha256 digest, package,
+versionCode and signing certificate, and installs it through a PackageInstaller session. It relies on the release
+conventions below: the tag `brainiac-v<major.minor.patch>`, a release that is neither draft nor pre-release, and
+the asset names `Brainiac-<version>-<abi|universal>.apk`. Change those and the updater stops finding releases.
 
 Upstream's `baseVersionName` and `baseVersionCode` are left alone, so upstream version bumps merge without
 conflicts; the fork never uses them.

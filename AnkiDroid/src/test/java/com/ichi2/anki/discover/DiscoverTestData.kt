@@ -41,6 +41,20 @@ object DiscoverTestData {
         }
         """
 
+    const val ALL_BLOCKS_SCREEN =
+        """
+        {"heading": "Alle blokken", "body": "platte tekst", "blocks": [
+          {"type": "text", "body": "Een **embedding** is een *lijst* getallen."},
+          {"type": "callout", "kind": "valkuil", "title": "Let op", "body": "Cosinus is geen kans."},
+          {"type": "example", "title": "Rekenvoorbeeld", "steps": ["stap 1", "stap 2"], "result": "uitkomst"},
+          {"type": "compare", "left": {"title": "Trefwoord", "points": ["exact"]},
+           "right": {"title": "Embedding", "points": ["betekenis"]}, "verdict": "combineer"},
+          {"type": "table", "headers": ["Model", "Dimensies"], "rows": [["klein", "384"], ["groot", "3072"]]},
+          {"type": "flow", "nodes": [{"label": "Vraag", "note": "tekst"}, {"label": "Embedding"}]},
+          {"type": "code", "language": "json", "body": "{\"a\": 1}"}
+        ]}
+        """
+
     const val SOURCES =
         """
         {"sources": [

@@ -3,8 +3,10 @@
 
 package com.ichi2.anki
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
@@ -32,14 +34,15 @@ class DeckPickerRecompositionTest : RobolectricTest() {
                 composeTestRule.waitForIdle()
 
                 // Verify the open state
-                composeTestRule.onNodeWithText("Decks").assertExists()
+                // the drawer and, in the Brainiac fork, the bottom bar both say "Decks"
+                composeTestRule.onAllNodesWithText("Decks").onFirst().assertExists()
 
                 // Trigger closure
                 CollectionManager.ensureClosed()
                 composeTestRule.waitForIdle()
 
                 // Verify disappearance
-                composeTestRule.onNodeWithText("Decks").assertDoesNotExist()
+                composeTestRule.onAllNodesWithText("Decks").assertCountEquals(0)
             }
         }
 }

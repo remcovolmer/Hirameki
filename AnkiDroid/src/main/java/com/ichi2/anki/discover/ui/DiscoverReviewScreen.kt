@@ -44,11 +44,11 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.unit.dp
 import com.ichi2.anki.R
+import com.ichi2.anki.discover.BASIC_NOTETYPE
 import com.ichi2.anki.discover.LessonState
 import com.ichi2.anki.discover.Proposal
 import com.ichi2.anki.discover.RejectReason
-
-private const val BASIC_NOTETYPE = "Basic"
+import com.ichi2.anki.discover.reviewFieldGroups
 
 /** Review of the proposals of one lesson: per card yes, change (edit or feedback) or no. */
 @Composable
@@ -113,7 +113,7 @@ private fun ProposalReview(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            displayFields(proposal).forEach { (label, value) -> FieldCard(label, value) }
+            displayFieldGroups(proposal).forEach { group -> FieldCard(group) }
             if (savedLocally) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
                     Text(
@@ -170,7 +170,7 @@ private fun ProposalReview(
         ReviewDialog.None -> {}
         ReviewDialog.Edit ->
             EditFieldsDialog(
-                fields = proposal.fields,
+                fields = editOrder(proposal),
                 onDismiss = { dialog = ReviewDialog.None },
                 onConfirm = {
                     dialog = ReviewDialog.None
@@ -196,28 +196,30 @@ private fun ProposalReview(
     }
 }
 
-/** For `Basic`: front and back. For other notetypes: every field with its name. */
+/** For `Basic`: front and back. For other notetypes: grouped and ordered by [reviewFieldGroups]. */
 @Composable
-private fun displayFields(proposal: Proposal): List<Pair<String, String>> =
+private fun displayFieldGroups(proposal: Proposal): List<List<Pair<String, String>>> =
     if (proposal.notetype == BASIC_NOTETYPE) {
         listOf(
-            stringResource(R.string.front_field_name) to proposal.fields["Front"].orEmpty(),
-            stringResource(R.string.back_field_name) to proposal.fields["Back"].orEmpty(),
+            listOf(stringResource(R.string.front_field_name) to proposal.fields["Front"].orEmpty()),
+            listOf(stringResource(R.string.back_field_name) to proposal.fields["Back"].orEmpty()),
         )
     } else {
-        proposal.fields.toList()
+        reviewFieldGroups(proposal.notetype, proposal.fields)
     }
 
+/** One card; a scenario and its answer share a card. */
 @Composable
-private fun FieldCard(
-    label: String,
-    html: String,
-) {
+private fun FieldCard(fields: List<Pair<String, String>>) {
     OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            // fields may contain HTML, as in Anki
-            Text(AnnotatedString.fromHtml(html), style = MaterialTheme.typography.bodyLarge)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            fields.forEach { (label, html) ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    // fields may contain HTML, as in Anki
+                    Text(AnnotatedString.fromHtml(html), style = MaterialTheme.typography.bodyLarge)
+                }
+            }
         }
     }
 }
@@ -238,6 +240,12 @@ private fun ReviewFinished(
         }
         Button(onClick = onDone) { Text(stringResource(R.string.discover_back_to_overview)) }
     }
+}
+
+/** The editor shows every field, in the same order as the review (scenario next to its answer). */
+private fun editOrder(proposal: Proposal): Map<String, String> {
+    val ordered = reviewFieldGroups(proposal.notetype, proposal.fields).flatten().toMap()
+    return ordered + proposal.fields.filterKeys { it !in ordered }
 }
 
 @Composable

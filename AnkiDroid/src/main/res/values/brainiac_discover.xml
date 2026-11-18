@@ -75,6 +75,18 @@
     <string name="discover_done_reading">Finish lesson</string>
     <string name="discover_page_indicator">Screen %1$d of %2$d</string>
 
+    <!-- Lesson blocks -->
+    <string name="discover_callout_key">Key idea</string>
+    <string name="discover_callout_pitfall">Pitfall</string>
+    <string name="discover_callout_nuance">Nuance</string>
+    <string name="discover_callout_practice">In practice</string>
+    <string name="discover_example_result">Result</string>
+    <string name="discover_compare_verdict">Bottom line</string>
+    <plurals name="discover_reading_minutes">
+        <item quantity="one">%d min read</item>
+        <item quantity="other">%d min read</item>
+    </plurals>
+
     <!-- Review -->
     <string name="discover_reject">Don’t add</string>
     <string name="discover_card_counter">Card %1$d of %2$d</string>

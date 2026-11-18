@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.ichi2.anki.R
+import com.ichi2.anki.brainiac.update.ui.UpdateSettingsRow
 import com.ichi2.anki.discover.DiscoverConfig
 
 @Composable
@@ -68,5 +69,6 @@ internal fun DiscoverSettingsScreen(
         Button(onClick = { onSave(url, appToken) }, enabled = valid) {
             Text(stringResource(R.string.save))
         }
+        UpdateSettingsRow(Modifier.padding(top = 24.dp))
     }
 }
