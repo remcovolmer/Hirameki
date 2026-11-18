@@ -104,6 +104,8 @@ internal fun messageText(message: DiscoverMessage): String =
         DiscoverMessage.SourceAdded -> stringResource(R.string.discover_source_added)
         DiscoverMessage.ProcessingStarted -> stringResource(R.string.discover_processing_started)
         DiscoverMessage.SettingsSaved -> stringResource(R.string.discover_settings_saved)
+        DiscoverMessage.BookDismissed -> stringResource(R.string.discover_book_dismissed)
+        DiscoverMessage.BookRestored -> stringResource(R.string.discover_book_restored)
     }
 
 @Composable

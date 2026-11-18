@@ -13,8 +13,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
-enum class DiscoverPage { Overview, Settings, Lesson, Review }
+enum class DiscoverTab { Lessons, Books }
+
+/** The pages of a tab: Lessons uses Overview, Settings, Stack, Lesson and Review; Books uses Overview, Settings and BookDetail. */
+enum class DiscoverPage { Overview, Settings, Stack, Lesson, Review, BookDetail }
 
 /** An API failure, reduced to what the UI shows. */
 data class DiscoverError(
@@ -106,22 +110,34 @@ sealed interface DiscoverMessage {
     data object ProcessingStarted : DiscoverMessage
 
     data object SettingsSaved : DiscoverMessage
+
+    data object BookDismissed : DiscoverMessage
+
+    data object BookRestored : DiscoverMessage
 }
 
 data class OverviewState(
     val loading: Boolean = false,
     val loaded: Boolean = false,
+    /** All lessons (also read ones), in the order of the service: stack by stack. */
     val lessons: List<LessonSummary> = emptyList(),
     val sources: List<Source> = emptyList(),
     val error: DiscoverError? = null,
     /** Sources whose "process" call is in flight; their button is disabled against double taps. */
     val processingSourceIds: Set<Long> = emptySet(),
+    /** Sources whose dismiss or restore call is in flight. */
+    val busySourceIds: Set<Long> = emptySet(),
     val pendingApprovals: Int = 0,
     /** Approved notes the service refused; shown until dismissed. */
     val orphans: List<PendingApproval> = emptyList(),
 ) {
-    /** The queue shows everything the routine has not finished yet. */
-    val queue: List<Source> get() = sources.filter { it.status != SourceStatus.PROCESSED }
+    val stacks: List<LessonStack> get() = groupIntoStacks(lessons)
+
+    /** Stacks with something left to do, in the order of the service. */
+    val openStacks: List<LessonStack> get() = stacks.filterNot { it.finished }
+    val finishedStacks: List<LessonStack> get() = stacks.filter { it.finished }
+
+    fun source(id: Long?): Source? = id?.let { sid -> sources.firstOrNull { it.id == sid } }
 }
 
 data class LessonState(
@@ -142,17 +158,63 @@ data class LessonState(
     val reviewFinished: Boolean get() = lesson != null && reviewIndex >= toReview.size
 }
 
+/** What the screen after a finished lesson offers. */
+sealed interface AfterLesson {
+    /** Another lesson of the stack is waiting; [number] is its 1-based place in the stack. */
+    data class Next(
+        val lesson: LessonSummary,
+        val number: Int,
+        val total: Int,
+    ) : AfterLesson
+
+    /** Every lesson of the stack is done (or the lesson stood alone). */
+    data class StackFinished(
+        val title: String,
+        val approvedInStack: Int,
+    ) : AfterLesson
+}
+
 data class DiscoverUiState(
-    val page: DiscoverPage = DiscoverPage.Overview,
+    val lessonsPage: DiscoverPage = DiscoverPage.Overview,
+    val booksPage: DiscoverPage = DiscoverPage.Overview,
     val serverUrl: String = "",
     val token: String = "",
     val overview: OverviewState = OverviewState(),
+    /** The stack being walked through on the Lessons tab. */
+    val openStackKey: String? = null,
     val lesson: LessonState? = null,
+    /** Cards approved since the stack was opened, for the "Stack finished" screen. */
+    val approvedInStack: Int = 0,
+    /** Approved cards since the last sync request. */
+    val unsyncedApprovals: Int = 0,
+    val bookId: Long? = null,
+    val bookFilter: BookFilter = BookFilter.ToReview,
+    val dismissedExpanded: Boolean = false,
+    /** Set to ask the route to switch to another tab (e.g. from a book to its lessons). */
+    val switchToTab: DiscoverTab? = null,
     val message: DiscoverMessage? = null,
-    /** Set when a lesson with approved cards is finished; the route starts the app's sync. */
+    /** Set when a stack walk ends with approved cards; the route starts the app's sync. */
     val syncRequested: Boolean = false,
 ) {
     val isConfigured: Boolean get() = DiscoverConfig.parse(serverUrl, token) != null
+    val config: DiscoverConfig? get() = DiscoverConfig.parse(serverUrl, token)
+    val openStack: LessonStack? get() = openStackKey?.let { key -> overview.stacks.firstOrNull { it.key == key } }
+    val book: Source? get() = overview.source(bookId)
+
+    fun page(tab: DiscoverTab) = if (tab == DiscoverTab.Lessons) lessonsPage else booksPage
+
+    /** What follows the open lesson once it is read and its cards are decided. */
+    val afterLesson: AfterLesson?
+        get() {
+            val lessonId = lesson?.lessonId ?: return null
+            val stack = openStack ?: return AfterLesson.StackFinished(lesson.title, approvedInStack)
+            val next = stack.nextAfter(lessonId) ?: stack.nextLesson?.takeIf { it.id != lessonId }
+            return if (next == null) {
+                AfterLesson.StackFinished(stack.title, approvedInStack)
+            } else {
+                AfterLesson.Next(next, stack.numberOf(next.id), stack.total)
+            }
+        }
 }
 
 class DiscoverViewModel(
@@ -180,9 +242,9 @@ class DiscoverViewModel(
 
     // ---- overview ----
 
-    /** Called when the Discover screen is shown; reloads the overview unless a lesson is open. */
-    fun onShown() {
-        if (_uiState.value.page == DiscoverPage.Overview) refresh()
+    /** Called when a tab is shown; reloads the lists unless something is open on that tab. */
+    fun onShown(tab: DiscoverTab) {
+        if (_uiState.value.page(tab) == DiscoverPage.Overview) refresh()
     }
 
     fun refresh() {
@@ -195,7 +257,7 @@ class DiscoverViewModel(
         viewModelScope.launch {
             val pending = decisions(api).reportPendingApprovals()
             try {
-                val lessons = api.openLessons()
+                val lessons = api.allLessons()
                 val sources = api.sources()
                 _uiState.update {
                     it.copy(
@@ -226,6 +288,8 @@ class DiscoverViewModel(
             }
         }
     }
+
+    // ---- books ----
 
     fun addSource(
         title: String,
@@ -270,18 +334,101 @@ class DiscoverViewModel(
         }
     }
 
+    fun setBookFilter(filter: BookFilter) = _uiState.update { it.copy(bookFilter = filter) }
+
+    fun toggleDismissed() = _uiState.update { it.copy(dismissedExpanded = !it.dismissedExpanded) }
+
+    fun openBook(sourceId: Long) {
+        _uiState.update { it.copy(booksPage = DiscoverPage.BookDetail, bookId = sourceId) }
+        val api = currentConfig()?.let(apiFactory) ?: return
+        viewModelScope.launch {
+            // the list may be a while old; the detail shows the latest description
+            try {
+                replaceSource(api.source(sourceId))
+            } catch (e: DiscoverApiException) {
+                Timber.w(e, "Discover: could not refresh source %d", sourceId)
+            }
+        }
+    }
+
+    fun dismissBook(
+        sourceId: Long,
+        comment: String?,
+    ) = changeBook(sourceId, DiscoverMessage.BookDismissed) { api -> api.dismiss(sourceId, comment?.trim()?.takeIf { it.isNotEmpty() }) }
+
+    fun restoreBook(sourceId: Long) = changeBook(sourceId, DiscoverMessage.BookRestored) { api -> api.restore(sourceId) }
+
+    private fun changeBook(
+        sourceId: Long,
+        success: DiscoverMessage,
+        call: suspend (DiscoverApi) -> Source,
+    ) {
+        val api = currentConfig()?.let(apiFactory) ?: return
+        if (sourceId in _uiState.value.overview.busySourceIds) return
+        _uiState.update { it.copy(overview = it.overview.copy(busySourceIds = it.overview.busySourceIds + sourceId)) }
+        viewModelScope.launch {
+            try {
+                replaceSource(call(api))
+                showMessage(success)
+            } catch (e: DiscoverApiException) {
+                showMessage(DiscoverMessage.Error(DiscoverError.from(e)))
+                // the status may have changed elsewhere: show the current one
+                try {
+                    replaceSource(api.source(sourceId))
+                } catch (refresh: DiscoverApiException) {
+                    Timber.w(refresh, "Discover: could not refresh source %d", sourceId)
+                }
+            } finally {
+                _uiState.update { it.copy(overview = it.overview.copy(busySourceIds = it.overview.busySourceIds - sourceId)) }
+            }
+        }
+    }
+
+    private fun replaceSource(source: Source) =
+        _uiState.update { state ->
+            val sources = state.overview.sources
+            val updated =
+                if (sources.any { it.id == source.id }) {
+                    sources.map {
+                        if (it.id ==
+                            source.id
+                        ) {
+                            source
+                        } else {
+                            it
+                        }
+                    }
+                } else {
+                    sources + source
+                }
+            state.copy(overview = state.overview.copy(sources = updated))
+        }
+
+    /** From a processed book to its lessons on the Lessons tab. */
+    fun openBookLessons(sourceId: Long) {
+        val stack =
+            _uiState.value.overview.stacks
+                .firstOrNull { it.sourceId == sourceId } ?: return
+        _uiState.update { it.copy(switchToTab = DiscoverTab.Lessons) }
+        openStack(stack.key)
+    }
+
+    fun tabSwitched() = _uiState.update { it.copy(switchToTab = null) }
+
     // ---- settings ----
 
-    fun openSettings() = _uiState.update { it.copy(page = DiscoverPage.Settings) }
+    fun openSettings(tab: DiscoverTab) = setPage(tab, DiscoverPage.Settings)
 
     fun saveSettings(
+        tab: DiscoverTab,
         serverUrl: String,
         token: String,
     ) {
         settings.save(serverUrl, token)
         _uiState.update {
             it.copy(
-                page = DiscoverPage.Overview,
+                lessonsPage = if (tab == DiscoverTab.Lessons) DiscoverPage.Overview else it.lessonsPage,
+                booksPage = if (tab == DiscoverTab.Books) DiscoverPage.Overview else it.booksPage,
                 serverUrl = settings.serverUrl,
                 token = settings.token,
                 overview = OverviewState(),
@@ -291,10 +438,50 @@ class DiscoverViewModel(
         refresh()
     }
 
+    // ---- stacks ----
+
+    /** Opens a stack; a stack of one lesson opens that lesson directly. */
+    fun openStack(stackKey: String) {
+        val stack =
+            _uiState.value.overview.stacks
+                .firstOrNull { it.key == stackKey } ?: return
+        _uiState.update { it.copy(openStackKey = stackKey, approvedInStack = 0, lesson = null) }
+        if (stack.total == 1) {
+            openLesson(stack.lessons.single())
+        } else {
+            _uiState.update { it.copy(lessonsPage = DiscoverPage.Stack) }
+        }
+    }
+
+    /** "Continue": the first lesson of the open stack that is not done. */
+    fun continueStack() {
+        val next = _uiState.value.openStack?.nextLesson ?: return
+        openLesson(next)
+    }
+
+    /** "Next lesson" after a finished lesson. */
+    fun openNextLesson() {
+        val next = (_uiState.value.afterLesson as? AfterLesson.Next)?.lesson ?: return
+        openLesson(next)
+    }
+
+    /** Leaves a finished stack for the list of stacks. */
+    fun closeStack() {
+        _uiState.update { it.copy(lessonsPage = DiscoverPage.Overview, lesson = null, openStackKey = null) }
+        requestSync()
+        refresh()
+    }
+
     // ---- lesson ----
 
     fun openLesson(summary: LessonSummary) {
-        _uiState.update { it.copy(page = DiscoverPage.Lesson, lesson = LessonState(lessonId = summary.id, title = summary.title)) }
+        _uiState.update {
+            it.copy(
+                lessonsPage = DiscoverPage.Lesson,
+                openStackKey = it.openStackKey ?: stackOf(summary).key,
+                lesson = LessonState(lessonId = summary.id, title = summary.title),
+            )
+        }
         loadLesson(summary.id)
     }
 
@@ -320,18 +507,17 @@ class DiscoverViewModel(
         }
     }
 
-    /** Marks the lesson as read and moves on to its cards (or back to the overview if it has none). */
+    /**
+     * Marks the lesson as read and moves on to its cards. A lesson without cards goes straight to
+     * the "lesson done" screen, which offers the next lesson of the stack.
+     */
     fun finishReading() {
         val lessonState = _uiState.value.lesson ?: return
         val lesson = lessonState.lesson ?: return
         val api = currentConfig()?.let(apiFactory) ?: return
-        _uiState.update {
-            if (lessonState.toReview.isEmpty()) {
-                it.copy(page = DiscoverPage.Overview, lesson = null)
-            } else {
-                it.copy(page = DiscoverPage.Review)
-            }
-        }
+        updateSummary(lesson.id) { it.copy(status = LessonStatus.READ) }
+        _uiState.update { it.copy(lessonsPage = DiscoverPage.Review) }
+        requestSyncIfStackFinished()
         if (lesson.status == LessonStatus.READ) return
         viewModelScope.launch {
             try {
@@ -339,14 +525,13 @@ class DiscoverViewModel(
             } catch (e: DiscoverApiException) {
                 showMessage(DiscoverMessage.Error(DiscoverError.from(e)))
             }
-            if (_uiState.value.page == DiscoverPage.Overview) refresh()
         }
     }
 
     /** Skips reading, straight to the cards. Used for lessons that were read before. */
     fun startReview() {
         if (_uiState.value.lesson?.lesson == null) return
-        _uiState.update { it.copy(page = DiscoverPage.Review) }
+        _uiState.update { it.copy(lessonsPage = DiscoverPage.Review) }
     }
 
     // ---- review ----
@@ -383,13 +568,29 @@ class DiscoverViewModel(
                         if (outcome is DecisionOutcome.SavedLocally) it.savedLocally + proposal.id else it.savedLocally - proposal.id,
                 )
             }
-            messageFor(outcome)?.let(::showMessage)
-            val finished = _uiState.value.lesson?.reviewFinished == true
-            if (finished && (_uiState.value.lesson?.approvedCount ?: 0) > 0) {
-                _uiState.update { it.copy(syncRequested = true) }
+            if (advance) {
+                // keep the stack's progress current without a reload
+                updateSummary(lesson.id) { s ->
+                    s.copy(proposalCounts = s.proposalCounts.copy(new = (s.proposalCounts.new - 1).coerceAtLeast(0)))
+                }
             }
+            if (approved) {
+                _uiState.update { it.copy(approvedInStack = it.approvedInStack + 1, unsyncedApprovals = it.unsyncedApprovals + 1) }
+            }
+            messageFor(outcome)?.let(::showMessage)
+            if (_uiState.value.lesson?.reviewFinished == true) requestSyncIfStackFinished()
         }
     }
+
+    /** At the end of a stack walk, cards approved on the way are synced, as the sync button does. */
+    private fun requestSyncIfStackFinished() {
+        val state = _uiState.value
+        if (state.lesson?.reviewFinished != true) return
+        if (state.afterLesson is AfterLesson.StackFinished) requestSync()
+    }
+
+    private fun requestSync() =
+        _uiState.update { if (it.unsyncedApprovals > 0) it.copy(syncRequested = true, unsyncedApprovals = 0) else it }
 
     private fun messageFor(outcome: DecisionOutcome): DiscoverMessage? =
         when (outcome) {
@@ -412,15 +613,7 @@ class DiscoverViewModel(
             pendingApprovals.get(proposalId)?.takeIf { it.isOrphan }?.let { pendingApprovals.remove(proposalId) }
         }
         _uiState.update {
-            it.copy(
-                overview =
-                    it.overview.copy(
-                        orphans =
-                            it.overview.orphans.filterNot { o ->
-                                o.proposalId == proposalId
-                            },
-                    ),
-            )
+            it.copy(overview = it.overview.copy(orphans = it.overview.orphans.filterNot { o -> o.proposalId == proposalId }))
         }
     }
 
@@ -428,13 +621,34 @@ class DiscoverViewModel(
 
     // ---- navigation ----
 
-    /** @return false when already on the overview, so the caller leaves the Discover screen */
-    fun back(): Boolean {
-        val page = _uiState.value.page
+    /** @return false when [tab] is on its list already, so the caller leaves the tab */
+    fun back(tab: DiscoverTab): Boolean {
+        val page = _uiState.value.page(tab)
         if (page == DiscoverPage.Overview) return false
-        val reviewedSomething = (_uiState.value.lesson?.reviewIndex ?: 0) > 0
-        _uiState.update { it.copy(page = DiscoverPage.Overview, lesson = if (page == DiscoverPage.Settings) it.lesson else null) }
-        if (page == DiscoverPage.Review || reviewedSomething) refresh()
+        if (tab == DiscoverTab.Books) {
+            setPage(tab, DiscoverPage.Overview)
+            return true
+        }
+        val stack = _uiState.value.openStack
+        val target =
+            when {
+                page == DiscoverPage.Settings -> DiscoverPage.Overview
+                page == DiscoverPage.Stack -> DiscoverPage.Overview
+                stack != null && stack.total > 1 -> DiscoverPage.Stack
+                else -> DiscoverPage.Overview
+            }
+        _uiState.update {
+            it.copy(
+                lessonsPage = target,
+                lesson = if (page == DiscoverPage.Settings) it.lesson else null,
+                openStackKey = if (target == DiscoverPage.Overview && page != DiscoverPage.Settings) null else it.openStackKey,
+            )
+        }
+        // leaving a lesson or stack: sync what was approved on the way, reload the progress
+        if (page == DiscoverPage.Lesson || page == DiscoverPage.Review || page == DiscoverPage.Stack) {
+            requestSync()
+            refresh()
+        }
         return true
     }
 
@@ -442,12 +656,24 @@ class DiscoverViewModel(
 
     private fun showMessage(message: DiscoverMessage) = _uiState.update { it.copy(message = message) }
 
+    private fun setPage(
+        tab: DiscoverTab,
+        page: DiscoverPage,
+    ) = _uiState.update { if (tab == DiscoverTab.Lessons) it.copy(lessonsPage = page) else it.copy(booksPage = page) }
+
     private fun updateLesson(
         lessonId: Long,
         transform: (LessonState) -> LessonState,
     ) = _uiState.update { state ->
         val lesson = state.lesson
         if (lesson == null || lesson.lessonId != lessonId) state else state.copy(lesson = transform(lesson))
+    }
+
+    private fun updateSummary(
+        lessonId: Long,
+        transform: (LessonSummary) -> LessonSummary,
+    ) = _uiState.update { state ->
+        state.copy(overview = state.overview.copy(lessons = state.overview.lessons.map { if (it.id == lessonId) transform(it) else it }))
     }
 
     companion object {

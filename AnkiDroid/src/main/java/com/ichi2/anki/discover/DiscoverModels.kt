@@ -49,6 +49,10 @@ enum class SourceStatus {
     @SerialName("mislukt")
     FAILED,
 
+    /** The user is not interested; not processed and not suggested again. */
+    @SerialName("afgewezen")
+    DISMISSED,
+
     UNKNOWN,
 }
 
@@ -63,10 +67,43 @@ data class Source(
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("processed_at") val processedAt: String? = null,
     @SerialName("last_fired_at") val lastFiredAt: String? = null,
+    /** The core of the book in 2-4 sentences. */
+    val summary: String? = null,
+    @SerialName("key_points") val keyPoints: List<String> = emptyList(),
+    /** Why this book may interest the user. */
+    val why: String? = null,
+    /** The direction the book was suggested under; the Books tab groups on it. */
+    val topic: String? = null,
+    val year: Int? = null,
+    val isbn: String? = null,
+    @SerialName("has_cover") val hasCover: Boolean = false,
+    @SerialName("lesson_count") val lessonCount: Int = 0,
 ) {
-    /** The service accepts `process` only for sources in these states (otherwise 409). */
+    /** The service accepts `process` and `dismiss` only for sources in these states (otherwise 409). */
     val canProcess: Boolean get() = status == SourceStatus.QUEUED || status == SourceStatus.FAILED
+    val canDismiss: Boolean get() = canProcess
+    val canRestore: Boolean get() = status == SourceStatus.DISMISSED
 }
+
+@Serializable
+enum class StackKind {
+    @SerialName("boek")
+    BOOK,
+
+    @SerialName("pad")
+    PATH,
+
+    @SerialName("los")
+    LOOSE,
+}
+
+/** The stack a lesson belongs to: one book, one learning path, or the loose lessons. */
+@Serializable
+data class LessonStackRef(
+    val key: String,
+    val title: String,
+    val kind: StackKind = StackKind.LOOSE,
+)
 
 @Serializable
 enum class LessonStatus {
@@ -97,6 +134,11 @@ data class LessonSummary(
     @SerialName("reading_minutes") val readingMinutes: Int? = null,
     val status: LessonStatus = LessonStatus.UNKNOWN,
     @SerialName("source_id") val sourceId: Long? = null,
+    /** Place within the stack (1 = first); null for lessons without an order. */
+    val position: Int? = null,
+    @SerialName("source_title") val sourceTitle: String? = null,
+    /** Missing on servers before 18-11; see [stackOf]. */
+    val stack: LessonStackRef? = null,
     @SerialName("proposal_counts") val proposalCounts: ProposalCounts = ProposalCounts(),
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("read_at") val readAt: String? = null,
@@ -132,6 +174,11 @@ data class Lesson(
     @SerialName("reading_minutes") val readingMinutes: Int? = null,
     val status: LessonStatus = LessonStatus.UNKNOWN,
     @SerialName("source_id") val sourceId: Long? = null,
+    /** Place within the stack (1 = first); null for lessons without an order. */
+    val position: Int? = null,
+    @SerialName("source_title") val sourceTitle: String? = null,
+    /** Missing on servers before 18-11; see [stackOf]. */
+    val stack: LessonStackRef? = null,
     val screens: List<LessonScreen> = emptyList(),
     val citations: List<Citation> = emptyList(),
     val proposals: List<Proposal> = emptyList(),
@@ -227,6 +274,12 @@ data class DecisionRequest(
         ) = DecisionRequest(decision = "nee", reason = reason.apiValue, comment = comment?.takeIf { it.isNotBlank() })
     }
 }
+
+/** Body of `POST /api/v1/sources/{id}/dismiss`. */
+@Serializable
+data class DismissRequest(
+    val comment: String? = null,
+)
 
 /** Body of `POST /api/v1/sources`. */
 @Serializable

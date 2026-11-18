@@ -323,6 +323,17 @@ class FakeDiscoverApi : DiscoverApi {
     override suspend fun addSource(request: NewSourceRequest): Source = throw UnsupportedOperationException()
 
     override suspend fun process(sourceId: Long): ProcessResponse = throw UnsupportedOperationException()
+
+    override suspend fun allLessons(): List<LessonSummary> = throw UnsupportedOperationException()
+
+    override suspend fun source(id: Long): Source = throw UnsupportedOperationException()
+
+    override suspend fun dismiss(
+        sourceId: Long,
+        comment: String?,
+    ): Source = throw UnsupportedOperationException()
+
+    override suspend fun restore(sourceId: Long): Source = throw UnsupportedOperationException()
 }
 
 class InMemoryPendingApprovalStore : PendingApprovalStore {

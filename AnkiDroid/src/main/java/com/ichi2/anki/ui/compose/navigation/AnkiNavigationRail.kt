@@ -26,7 +26,8 @@ enum class AppNavigationItem(
     @StringRes val labelResId: Int,
 ) {
     Decks(R.drawable.list_24px, R.string.decks),
-    Discover(R.drawable.explore_24px, R.string.discover_title),
+    Lessons(R.drawable.ic_lightbulb, R.string.discover_tab_lessons),
+    Books(R.drawable.book_ribbon_24px, R.string.discover_tab_books),
     CardBrowser(
         R.drawable.cards_stack_24px,
         R.string.browser,
