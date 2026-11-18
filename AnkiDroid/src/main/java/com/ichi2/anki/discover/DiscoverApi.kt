@@ -102,6 +102,8 @@ enum class DiscoverErrorCode(
     PROPOSAL_NOT_NEW("proposal_not_new"),
     NOTE_ID_MISMATCH("note_id_mismatch"),
     SOURCE_NOT_QUEUED("source_not_queued"),
+    SOURCE_NOT_DISMISSED("source_not_dismissed"),
+    POSITION_TAKEN("position_taken"),
     DOUBLE_TAP("double_tap"),
     ROUTINE_NOT_CONFIGURED("routine_not_configured"),
     ROUTINE_FAILED("routine_failed"),

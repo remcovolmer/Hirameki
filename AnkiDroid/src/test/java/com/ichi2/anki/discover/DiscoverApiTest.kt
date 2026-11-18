@@ -317,6 +317,36 @@ class DiscoverApiTest {
         }
 
     @Test
+    fun `restoring a book that is not dismissed is a 409 with its own code`() =
+        runTest {
+            server.on("POST", "/api/v1/sources/5/restore", 409, """{"detail": "niet afgewezen", "code": "source_not_dismissed"}""")
+
+            val e = assertFailsWith<DiscoverApiException.Conflict> { api().restore(5) }
+
+            assertEquals(DiscoverErrorCode.SOURCE_NOT_DISMISSED, e.errorCode)
+        }
+
+    @Test
+    fun `the live summary format is read, extra fields ignored`() =
+        runTest {
+            server.on(
+                "GET",
+                "/api/v1/lessons",
+                200,
+                """{"lessons": [{"id": 4, "slug": "atomic-habits-kleine-winsten-stapelen", "source_id": 1,
+                    "source_title": "Atomic Habits", "position": 1, "stack": {"key": "bron:1", "title": "Atomic Habits", "kind": "boek"},
+                    "track": "boek", "title": "Kleine winsten stapelen", "subtitle": "Atomic Habits · idee 1 van 7", "reading_minutes": 4,
+                    "status": "nieuw", "created_at": "2026-11-18T20:38:26Z", "read_at": null, "revised_at": null, "revision_count": 0,
+                    "proposal_counts": {"nieuw": 2, "goedgekeurd": 0, "afgewezen": 0, "feedback": 0}}]}""",
+            )
+
+            val lesson = api().allLessons().single()
+
+            assertEquals("bron:1", lesson.stack?.key)
+            assertEquals(2, lesson.proposalCounts.new)
+        }
+
+    @Test
     fun `cover url`() {
         assertEquals(
             "http://brainiac.test/brainiac/api/v1/sources/5/cover",

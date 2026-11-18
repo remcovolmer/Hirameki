@@ -51,12 +51,14 @@ data class DiscoverError(
                 when (e.errorCode) {
                     DiscoverErrorCode.DOUBLE_TAP -> Kind.DoubleTap
                     DiscoverErrorCode.SOURCE_NOT_QUEUED -> Kind.SourceNotQueued
+                    // restore on a book that is not dismissed: the status changed elsewhere
+                    DiscoverErrorCode.SOURCE_NOT_DISMISSED -> Kind.Conflict
                     DiscoverErrorCode.ROUTINE_NOT_CONFIGURED -> Kind.RoutineNotConfigured
                     DiscoverErrorCode.ROUTINE_FAILED -> Kind.RoutineFailed
                     DiscoverErrorCode.PROPOSAL_NOT_NEW, DiscoverErrorCode.NOTE_ID_MISMATCH -> Kind.ProposalNotNew
                     DiscoverErrorCode.UNAUTHORIZED -> Kind.Unauthorized
                     DiscoverErrorCode.NOT_FOUND -> Kind.NotFound
-                    DiscoverErrorCode.INVALID, DiscoverErrorCode.INTERNAL, null -> null
+                    DiscoverErrorCode.INVALID, DiscoverErrorCode.INTERNAL, DiscoverErrorCode.POSITION_TAKEN, null -> null
                 }
             return byCode?.let { DiscoverError(it, e.detail) } ?: fromStatus(e)
         }
