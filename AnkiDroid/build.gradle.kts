@@ -48,7 +48,7 @@ val baseVersionName = "1.1.10"
 // fork's releases still climb. release_apk.yml reads brainiacVersionName and expects the tag brainiac-v<name>.
 // the versionCode follows from the name (major * 1_000_000 + minor * 1_000 + patch), so bumping the name is enough;
 // keep major below 100 and minor and patch below 1000, which keeps it under the per-abi offset of 100_000_000 below
-val brainiacVersionName = "0.3.0"
+val brainiacVersionName = "0.4.0"
 val brainiacVersionCode =
     brainiacVersionName
         .split(".")
