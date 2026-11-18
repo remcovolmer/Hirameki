@@ -63,6 +63,11 @@ val brainiacVersionCode =
 // set in gradle.properties, which the api module reads too: the content provider's authority and permission follow it
 val brainiacApplicationId = providers.gradleProperty("brainiacApplicationId").get()
 
+// in-app updater: the repository whose GitHub releases it follows, and the per-abi versionCode offsets below
+// (abi code * 100_000_000 + brainiacVersionCode), so the app can tell which kind of apk is installed
+val brainiacReleasesRepo = providers.gradleProperty("brainiacReleasesRepo").get()
+val brainiacAbiVersionCodes = mapOf("armeabi-v7a" to 1, "x86" to 2, "arm64-v8a" to 3, "x86_64" to 4)
+
 // signing key for local release builds, so a local apk installs over a ci one. ci sets KEYSTOREPATH and friends
 // (release_apk.yml); locally the key comes from a properties file outside the repo, by default
 // ~/.brainiac/keystore/signing.properties (keys: keystore.path, keystore.password, key.alias, key.password),
@@ -233,6 +238,14 @@ extensions.configure<ApplicationExtension> {
         buildConfigField("Boolean", "ENABLE_LEAK_CANARY", "false")
         buildConfigField("String", "GIT_COMMIT_HASH", "\"${gitCommitHash()}\"")
         buildConfigField("long", "BUILD_TIME", "${buildTime()}L")
+        buildConfigField("String", "BRAINIAC_RELEASES_REPO", "\"$brainiacReleasesRepo\"")
+        buildConfigField(
+            "String",
+            "BRAINIAC_ABI_VERSION_CODES",
+            "\"${brainiacAbiVersionCodes.entries.joinToString(",") { "${it.key}:${it.value}" }}\"",
+        )
+        // only the full flavor (the one on GitHub Releases) updates itself; see src/full/AndroidManifest.xml
+        buildConfigField("Boolean", "BRAINIAC_UPDATER_ENABLED", "false")
         resValue("string", "app_name", "Brainiac")
 
         versionCode = brainiacVersionCode
@@ -351,6 +364,7 @@ extensions.configure<ApplicationExtension> {
 
         create("full") {
             dimension = "appStore"
+            buildConfigField("Boolean", "BRAINIAC_UPDATER_ENABLED", "true")
         }
     }
 
@@ -417,9 +431,7 @@ extensions.configure<ApplicationAndroidComponentsExtension> {
                     output.filters.find { it.filterType == FilterConfiguration.FilterType.ABI }
                 if (abiFilter != null) {
                     val abi = abiFilter.identifier
-                    val versionCodes =
-                        mapOf("armeabi-v7a" to 1, "x86" to 2, "arm64-v8a" to 3, "x86_64" to 4)
-                    val abiVersionCode = versionCodes[abi]
+                    val abiVersionCode = brainiacAbiVersionCodes[abi]
                     if (abiVersionCode != null) {
                         output.versionCode.set(abiVersionCode * 100000000 + brainiacVersionCode)
                     }

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Strings of the Brainiac in-app updater (com.ichi2.anki.brainiac.update). Kept in their own file so the fork
+  rebases cleanly.
+-->
+<resources>
+    <!-- Banner -->
+    <string name="update_available_title">Update available: %1$s → %2$s</string>
+    <string name="update_action_update">Update</string>
+    <string name="update_action_dismiss">Dismiss</string>
+    <string name="update_downloading">Downloading… %1$d%%</string>
+    <string name="update_verifying">Checking the download…</string>
+    <string name="update_installing">Installing…</string>
+    <string name="update_waiting_for_android">Waiting for Android to finish the installation…</string>
+    <string name="update_succeeded">Update installed</string>
+    <string name="update_canceled">Installation canceled</string>
+    <string name="update_needs_permission">Brainiac may not install apps yet.</string>
+    <string name="update_failed">Update failed: %1$s</string>
+
+    <!-- Dialog before the download -->
+    <string name="update_confirm_title">Update Brainiac to %1$s?</string>
+    <string name="update_confirm_versions">Installed: %1$s\nNew: %2$s</string>
+    <string name="update_confirm_size">Download: %1$s</string>
+    <string name="update_confirm_notes">What\'s new</string>
+    <string name="update_confirm_no_notes">No release notes.</string>
+    <string name="update_confirm_install">Download and install</string>
+
+    <!-- Permission to install apps -->
+    <string name="update_permission_title">Allow installing updates</string>
+    <string name="update_permission_text">Android only installs updates from apps you allow. On the next screen, turn on \"Allow from this source\" for Brainiac, then go back.</string>
+
+    <!-- Settings row -->
+    <string name="update_settings_title">App updates</string>
+    <string name="update_settings_version">Version %1$s</string>
+    <string name="update_settings_not_supported">This build is updated by the store it was installed from.</string>
+    <string name="update_check_now">Check for updates</string>
+    <string name="update_auto_check">Check automatically</string>
+    <string name="update_auto_check_summary">At most once a day, when the app opens</string>
+    <string name="update_status_checking">Checking…</string>
+    <string name="update_status_up_to_date">You have the latest version (%1$s).</string>
+    <string name="update_status_available">Version %1$s is available.</string>
+    <string name="update_status_no_asset">Version %1$s is out, but without a download for this build (%2$s).</string>
+    <string name="update_status_unknown_install">This build has no release version, so it cannot be updated.</string>
+    <string name="update_status_failed">Could not check for updates: %1$s</string>
+
+    <!-- Reasons, used in update_failed and update_status_failed -->
+    <string name="update_failure_network">no connection to GitHub</string>
+    <string name="update_failure_rate_limited">GitHub limits the number of requests, try again later</string>
+    <string name="update_failure_http">GitHub answered with HTTP %1$d</string>
+    <string name="update_failure_invalid_response">GitHub sent an unexpected answer</string>
+    <string name="update_failure_host">the download went to an address outside GitHub</string>
+    <string name="update_failure_size">the download has the wrong size</string>
+    <string name="update_failure_digest">the download does not match its checksum</string>
+    <string name="update_failure_not_apk">the download is not an app Android can read</string>
+    <string name="update_failure_wrong_package">the download is a different app</string>
+    <string name="update_failure_not_newer">the download is not newer than the installed version</string>
+    <string name="update_failure_wrong_variant">the download is a different kind of build (universal or per processor)</string>
+    <string name="update_failure_signature">the download is not signed with the key of the installed app</string>
+    <string name="update_failure_storage">the download could not be saved</string>
+    <string name="update_failure_permission">Brainiac is not allowed to install apps</string>
+    <string name="update_failure_install">Android could not install it (%1$s)</string>
+</resources>
