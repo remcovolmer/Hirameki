@@ -38,6 +38,7 @@ object DiscoverDestination : NavKey
 fun DiscoverRoute(
     onNavigateUp: () -> Unit,
     onSync: () -> Unit,
+    withBottomBar: Boolean = false,
 ) {
     val context = LocalContext.current
     val factory = remember(context) { DiscoverViewModel.factory(context) }
@@ -72,7 +73,8 @@ fun DiscoverRoute(
                 DiscoverPage.Overview ->
                     DiscoverTopBar(
                         title = stringResource(R.string.discover_title),
-                        onNavigateUp = onNavigateUp,
+                        // with the bottom bar, Decks is a tab away: no up arrow
+                        onNavigateUp = if (withBottomBar) null else onNavigateUp,
                         actions = { OverviewActions(onRefresh = viewModel::refresh, onOpenSettings = viewModel::openSettings) },
                     )
                 DiscoverPage.Settings ->
@@ -96,6 +98,12 @@ fun DiscoverRoute(
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        // only on the overview: a lesson or review is read without the bar
+        bottomBar = {
+            if (withBottomBar && state.page == DiscoverPage.Overview) {
+                BrainiacNavigationBar(BrainiacTab.Discover, onSelect = { onNavigateUp() })
+            }
+        },
     ) { padding ->
         when (state.page) {
             DiscoverPage.Overview ->

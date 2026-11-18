@@ -77,8 +77,11 @@ import com.ichi2.anki.dialogs.compose.LoginToAnkiWebDialog
 import com.ichi2.anki.dialogs.compose.NetworkErrorDialog
 import com.ichi2.anki.dialogs.compose.NoSpaceLeftDialog
 import com.ichi2.anki.dialogs.customstudy.CustomStudyDialog
+import com.ichi2.anki.discover.ui.BrainiacTab
 import com.ichi2.anki.discover.ui.DiscoverDestination
 import com.ichi2.anki.discover.ui.DiscoverRoute
+import com.ichi2.anki.discover.ui.WithBrainiacNavigationBar
+import com.ichi2.anki.discover.ui.showInDrawer
 import com.ichi2.anki.launchCatchingTask
 import com.ichi2.anki.navigation.CongratsScreen
 import com.ichi2.anki.navigation.ContributeScreen
@@ -289,7 +292,7 @@ fun DeckPickerNavHost(
             }
 
             entry<DiscoverDestination> {
-                DiscoverRoute(onNavigateUp = { navigator.goBack() }, onSync = { viewModel.sync() })
+                DiscoverRoute(onNavigateUp = { navigator.goBack() }, onSync = { viewModel.sync() }, withBottomBar = !fragmented)
             }
 
             entry<ManageNoteTypesDestination> {
@@ -696,7 +699,9 @@ private fun DeckPickerMainContent(
             }
         }
     } else {
-        DeckPickerWithDrawer(state = deckPickerDrawerState, actions = deckPickerDrawerActions)
+        WithBrainiacNavigationBar(BrainiacTab.Decks, onSelect = { navigator.navigate(DiscoverDestination) }) {
+            DeckPickerWithDrawer(state = deckPickerDrawerState, actions = deckPickerDrawerActions)
+        }
     }
 
     SetupFlows(
@@ -739,7 +744,7 @@ private fun DeckPickerWithDrawer(
                                 bottom = 24.dp,
                             ),
                     )
-                    AppNavigationItem.entries.forEach { item ->
+                    AppNavigationItem.entries.filter { it.showInDrawer }.forEach { item ->
                         if (item == AppNavigationItem.Settings) {
                             HorizontalDivider(
                                 modifier =

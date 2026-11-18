@@ -32,14 +32,16 @@ import com.ichi2.anki.discover.OrphanReason
 @Composable
 internal fun DiscoverTopBar(
     title: String,
-    onNavigateUp: () -> Unit,
+    onNavigateUp: (() -> Unit)?,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
         title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = {
-            IconButton(onClick = onNavigateUp) {
-                Icon(painterResource(R.drawable.arrow_back_24px), contentDescription = stringResource(R.string.back))
+            if (onNavigateUp != null) {
+                IconButton(onClick = onNavigateUp) {
+                    Icon(painterResource(R.drawable.arrow_back_24px), contentDescription = stringResource(R.string.back))
+                }
             }
         },
         actions = actions,
