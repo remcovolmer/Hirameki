@@ -153,4 +153,23 @@ class LessonBlocksTest {
         assertTrue(narrow.fold(0.dp) { a, b -> a + b } > 200.dp)
         assertEquals(1000f, wide.fold(0.dp) { a, b -> a + b }.value, 0.5f)
     }
+
+    @Test
+    fun `optional fields sent as null and empty table cells are fine`() {
+        val screen =
+            screen(
+                """{"heading": null, "body": "plat", "blocks": [
+                    {"type": "callout", "kind": "kern", "title": null, "body": "b"},
+                    {"type": "example", "title": "t", "steps": ["s"], "result": null},
+                    {"type": "compare", "left": {"title": "l", "points": ["p"]}, "right": {"title": "r", "points": ["q"]}, "verdict": null},
+                    {"type": "table", "headers": ["a", "b"], "rows": [["", "x"]]},
+                    {"type": "flow", "title": null, "nodes": [{"label": "n", "note": null}, {"label": "m", "note": null}]},
+                    {"type": "code", "language": null, "body": "c"}
+                ]}""",
+            )
+
+        assertEquals(6, screen.blocks.size)
+        assertNull(screen.heading)
+        assertEquals(listOf(listOf("", "x")), assertIs<TableBlock>(screen.blocks[3]).normalizedRows)
+    }
 }
