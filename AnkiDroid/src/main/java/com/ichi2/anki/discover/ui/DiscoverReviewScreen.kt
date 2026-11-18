@@ -37,7 +37,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
@@ -58,12 +57,12 @@ internal fun DiscoverReviewScreen(
     onApprove: (editedFields: Map<String, String>?) -> Unit,
     onFeedback: (String) -> Unit,
     onReject: (RejectReason, String?) -> Unit,
-    onDone: () -> Unit,
+    finished: @Composable () -> Unit,
 ) {
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
         val proposal = state.currentProposal
         if (proposal == null) {
-            ReviewFinished(approvedCount = state.approvedCount, onDone = onDone)
+            finished()
             return@Box
         }
         // keyed on the proposal, so dialog state does not leak to the next card
@@ -221,24 +220,6 @@ private fun FieldCard(fields: List<Pair<String, String>>) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ReviewFinished(
-    approvedCount: Int,
-    onDone: () -> Unit,
-) {
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(stringResource(R.string.discover_review_done), style = MaterialTheme.typography.titleMedium)
-        if (approvedCount > 0) {
-            Text(pluralStringResource(R.plurals.discover_review_done_added, approvedCount, approvedCount))
-        }
-        Button(onClick = onDone) { Text(stringResource(R.string.discover_back_to_overview)) }
     }
 }
 

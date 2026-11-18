@@ -251,6 +251,80 @@ class DiscoverApiTest {
         }
 
     @Test
+    fun `all lessons with their stack and position`() =
+        runTest {
+            server.on(
+                "GET",
+                "/api/v1/lessons",
+                200,
+                """{"lessons": [{"id": 1, "slug": "a", "title": "Idee 1", "status": "gelezen", "position": 1,
+                    "source_id": 3, "source_title": "Atomic Habits",
+                    "stack": {"key": "bron:3", "title": "Atomic Habits", "kind": "boek"}}]}""",
+            )
+
+            val lesson = api().allLessons().single()
+
+            assertEquals("status=all", server.requests.single().query)
+            assertEquals(1, lesson.position)
+            assertEquals("Atomic Habits", lesson.sourceTitle)
+            assertEquals(LessonStackRef("bron:3", "Atomic Habits", StackKind.BOOK), lesson.stack)
+        }
+
+    @Test
+    fun `a book with its description`() =
+        runTest {
+            server.on(
+                "GET",
+                "/api/v1/sources/5",
+                200,
+                """{"id": 5, "title": "Thinking in Systems", "author": "Donella Meadows", "status": "wachtrij",
+                    "summary": "Systemen gedragen zich door hun structuur.", "key_points": ["voorraden", "terugkoppeling"],
+                    "why": "Past bij je werk.", "topic": "systemen", "year": 2008, "isbn": "9781603580557",
+                    "has_cover": true, "lesson_count": 0}""",
+            )
+
+            val source = api().source(5)
+
+            assertEquals(listOf("voorraden", "terugkoppeling"), source.keyPoints)
+            assertEquals(2008, source.year)
+            assertEquals("systemen", source.topic)
+            assertTrue(source.hasCover)
+        }
+
+    @Test
+    fun `dismiss sends the comment, restore sends nothing`() =
+        runTest {
+            server.on("POST", "/api/v1/sources/5/dismiss", 200, """{"id": 5, "title": "x", "status": "afgewezen"}""")
+            server.on("POST", "/api/v1/sources/5/restore", 200, """{"id": 5, "title": "x", "status": "wachtrij"}""")
+
+            assertEquals(SourceStatus.DISMISSED, api().dismiss(5, "te theoretisch").status)
+            assertEquals("te theoretisch", body()["comment"]!!.jsonPrimitive.content)
+            api().dismiss(5, null)
+            assertFalse("no comment, no field", "comment" in body())
+
+            assertEquals(SourceStatus.QUEUED, api().restore(5).status)
+            assertEquals("", server.requests.last().body)
+        }
+
+    @Test
+    fun `dismissing a book that is not queued is a 409 with its code`() =
+        runTest {
+            server.on("POST", "/api/v1/sources/5/dismiss", 409, """{"detail": "bezig", "code": "source_not_queued"}""")
+
+            val e = assertFailsWith<DiscoverApiException.Conflict> { api().dismiss(5, null) }
+
+            assertEquals(DiscoverErrorCode.SOURCE_NOT_QUEUED, e.errorCode)
+        }
+
+    @Test
+    fun `cover url`() {
+        assertEquals(
+            "http://brainiac.test/brainiac/api/v1/sources/5/cover",
+            DiscoverConfig.parse("http://brainiac.test/brainiac/", "t")!!.coverUrl(5),
+        )
+    }
+
+    @Test
     fun `config parsing`() {
         assertNull(DiscoverConfig.parse("", "token"))
         assertNull(DiscoverConfig.parse("http://brainiac.test", " "))

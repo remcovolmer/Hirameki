@@ -2,6 +2,8 @@
 
 package com.ichi2.anki.discover.ui
 
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -17,18 +19,54 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.navigation3.runtime.NavKey
 import com.ichi2.anki.R
+import com.ichi2.anki.discover.DiscoverTab
+import com.ichi2.anki.navigation.Navigator
 import com.ichi2.anki.ui.compose.navigation.AppNavigationItem
+import kotlinx.serialization.Serializable
 
 /*
- * The bottom navigation bar of the fork on phones: Decks and Discover. Tablets keep the upstream
- * navigation rail. Kept out of the deck picker files so upstream changes there stay easy to merge.
+ * The bottom navigation bar of the fork on phones: Decks, Lessons and Books. Tablets keep the
+ * upstream navigation rail, which lists Lessons and Books too. Kept out of the deck picker files
+ * so upstream changes there stay easy to merge.
  */
 
-enum class BrainiacTab { Decks, Discover }
+enum class BrainiacTab(
+    @DrawableRes val icon: Int,
+    @StringRes val label: Int,
+) {
+    Decks(R.drawable.list_24px, R.string.decks),
+    Lessons(R.drawable.ic_lightbulb, R.string.discover_tab_lessons),
+    Books(R.drawable.book_ribbon_24px, R.string.discover_tab_books),
+}
 
-/** Discover lives in the bottom bar (phones) and the rail (tablets), not in the drawer. */
-val AppNavigationItem.showInDrawer: Boolean get() = this != AppNavigationItem.Discover
+/** Navigation key of the Lessons tab in the deck picker's Nav3 graph. */
+@Serializable
+object LessonsDestination : NavKey
+
+/** Navigation key of the Books tab in the deck picker's Nav3 graph. */
+@Serializable
+object BooksDestination : NavKey
+
+/** Lessons and Books live in the bottom bar (phones) and the rail (tablets), not in the drawer. */
+val AppNavigationItem.showInDrawer: Boolean get() = this != AppNavigationItem.Lessons && this != AppNavigationItem.Books
+
+val DiscoverTab.brainiacTab: BrainiacTab get() = if (this == DiscoverTab.Lessons) BrainiacTab.Lessons else BrainiacTab.Books
+
+/**
+ * Shows [tab]. The tabs replace each other on top of the deck list instead of piling up, so back
+ * from either tab leads to the decks.
+ */
+fun Navigator.showBrainiacTab(tab: BrainiacTab) {
+    val stack = state.backStacks[state.topLevelRoute] ?: return
+    while (stack.lastOrNull() is LessonsDestination || stack.lastOrNull() is BooksDestination) goBack()
+    when (tab) {
+        BrainiacTab.Decks -> {}
+        BrainiacTab.Lessons -> navigate(LessonsDestination)
+        BrainiacTab.Books -> navigate(BooksDestination)
+    }
+}
 
 @Composable
 fun BrainiacNavigationBar(
@@ -37,18 +75,14 @@ fun BrainiacNavigationBar(
     modifier: Modifier = Modifier,
 ) {
     NavigationBar(modifier) {
-        NavigationBarItem(
-            selected = selected == BrainiacTab.Decks,
-            onClick = { if (selected != BrainiacTab.Decks) onSelect(BrainiacTab.Decks) },
-            icon = { Icon(painterResource(R.drawable.list_24px), contentDescription = null) },
-            label = { Text(stringResource(R.string.decks)) },
-        )
-        NavigationBarItem(
-            selected = selected == BrainiacTab.Discover,
-            onClick = { if (selected != BrainiacTab.Discover) onSelect(BrainiacTab.Discover) },
-            icon = { Icon(painterResource(R.drawable.explore_24px), contentDescription = null) },
-            label = { Text(stringResource(R.string.discover_title)) },
-        )
+        BrainiacTab.entries.forEach { tab ->
+            NavigationBarItem(
+                selected = selected == tab,
+                onClick = { if (selected != tab) onSelect(tab) },
+                icon = { Icon(painterResource(tab.icon), contentDescription = null) },
+                label = { Text(stringResource(tab.label)) },
+            )
+        }
     }
 }
 

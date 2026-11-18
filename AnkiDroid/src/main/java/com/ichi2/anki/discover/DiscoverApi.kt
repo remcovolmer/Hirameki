@@ -24,6 +24,9 @@ interface DiscoverApi {
     /** `GET /api/v1/lessons` with the default filter `open`. */
     suspend fun openLessons(): List<LessonSummary>
 
+    /** `GET /api/v1/lessons?status=all`: read lessons too, so a stack can show its progress. */
+    suspend fun allLessons(): List<LessonSummary>
+
     suspend fun lesson(id: Long): Lesson
 
     suspend fun markRead(lessonId: Long): Lesson
@@ -38,6 +41,17 @@ interface DiscoverApi {
     suspend fun addSource(request: NewSourceRequest): Source
 
     suspend fun process(sourceId: Long): ProcessResponse
+
+    suspend fun source(id: Long): Source
+
+    /** Marks a queued or failed source as not interesting (409 `source_not_queued` otherwise). */
+    suspend fun dismiss(
+        sourceId: Long,
+        comment: String?,
+    ): Source
+
+    /** Puts a dismissed source back in the queue (409 otherwise). */
+    suspend fun restore(sourceId: Long): Source
 }
 
 /** Where the service lives and how to authenticate. */
@@ -45,6 +59,14 @@ data class DiscoverConfig(
     val baseUrl: HttpUrl,
     val token: String,
 ) {
+    /** `GET /api/v1/sources/{id}/cover`; needs the bearer token. */
+    fun coverUrl(sourceId: Long): String =
+        baseUrl
+            .newBuilder()
+            .addPathSegments("api/v1/sources/$sourceId/cover")
+            .build()
+            .toString()
+
     override fun toString() = "DiscoverConfig(baseUrl=$baseUrl, token=***)"
 
     companion object {
@@ -158,6 +180,8 @@ class OkHttpDiscoverApi(
 ) : DiscoverApi {
     override suspend fun openLessons(): List<LessonSummary> = get<LessonsResponse>("lessons").lessons
 
+    override suspend fun allLessons(): List<LessonSummary> = get<LessonsResponse>("lessons?status=all").lessons
+
     override suspend fun lesson(id: Long): Lesson = get("lessons/$id")
 
     override suspend fun markRead(lessonId: Long): Lesson = post("lessons/$lessonId/read", body = null)
@@ -173,6 +197,15 @@ class OkHttpDiscoverApi(
 
     override suspend fun process(sourceId: Long): ProcessResponse = post("sources/$sourceId/process", body = null)
 
+    override suspend fun source(id: Long): Source = get("sources/$id")
+
+    override suspend fun dismiss(
+        sourceId: Long,
+        comment: String?,
+    ): Source = post("sources/$sourceId/dismiss", jsonBody(DismissRequest(comment?.trim()?.takeIf { it.isNotEmpty() })))
+
+    override suspend fun restore(sourceId: Long): Source = post("sources/$sourceId/restore", body = null)
+
     private suspend inline fun <reified T> get(path: String): T = execute(request(path).get().build(), serializer())
 
     private suspend inline fun <reified T> post(
@@ -186,7 +219,8 @@ class OkHttpDiscoverApi(
         val url =
             config.baseUrl
                 .newBuilder()
-                .addPathSegments("api/v1/$path")
+                .addPathSegments("api/v1/${path.substringBefore('?')}")
+                .apply { if ('?' in path) encodedQuery(path.substringAfter('?')) }
                 .build()
         return Request
             .Builder()

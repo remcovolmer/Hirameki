@@ -77,10 +77,13 @@ import com.ichi2.anki.dialogs.compose.LoginToAnkiWebDialog
 import com.ichi2.anki.dialogs.compose.NetworkErrorDialog
 import com.ichi2.anki.dialogs.compose.NoSpaceLeftDialog
 import com.ichi2.anki.dialogs.customstudy.CustomStudyDialog
+import com.ichi2.anki.discover.DiscoverTab
+import com.ichi2.anki.discover.ui.BooksDestination
 import com.ichi2.anki.discover.ui.BrainiacTab
-import com.ichi2.anki.discover.ui.DiscoverDestination
 import com.ichi2.anki.discover.ui.DiscoverRoute
+import com.ichi2.anki.discover.ui.LessonsDestination
 import com.ichi2.anki.discover.ui.WithBrainiacNavigationBar
+import com.ichi2.anki.discover.ui.showBrainiacTab
 import com.ichi2.anki.discover.ui.showInDrawer
 import com.ichi2.anki.launchCatchingTask
 import com.ichi2.anki.navigation.CongratsScreen
@@ -291,8 +294,12 @@ fun DeckPickerNavHost(
                 StatisticsScreen(onNavigateUp = { navigator.goBack() })
             }
 
-            entry<DiscoverDestination> {
-                DiscoverRoute(onNavigateUp = { navigator.goBack() }, onSync = { viewModel.sync() }, withBottomBar = !fragmented)
+            entry<LessonsDestination> {
+                DiscoverRoute(DiscoverTab.Lessons, navigator::showBrainiacTab, onSync = { viewModel.sync() }, withBottomBar = !fragmented)
+            }
+
+            entry<BooksDestination> {
+                DiscoverRoute(DiscoverTab.Books, navigator::showBrainiacTab, onSync = { viewModel.sync() }, withBottomBar = !fragmented)
             }
 
             entry<ManageNoteTypesDestination> {
@@ -584,9 +591,9 @@ private fun DeckPickerMainContent(
                 }
             }
 
-            AppNavigationItem.Discover -> {
-                navigator.navigate(DiscoverDestination)
-            }
+            AppNavigationItem.Lessons -> navigator.showBrainiacTab(BrainiacTab.Lessons)
+
+            AppNavigationItem.Books -> navigator.showBrainiacTab(BrainiacTab.Books)
 
             AppNavigationItem.Statistics -> {
                 navigator.navigate(StatisticsDestination)
@@ -699,7 +706,7 @@ private fun DeckPickerMainContent(
             }
         }
     } else {
-        WithBrainiacNavigationBar(BrainiacTab.Decks, onSelect = { navigator.navigate(DiscoverDestination) }) {
+        WithBrainiacNavigationBar(BrainiacTab.Decks, onSelect = navigator::showBrainiacTab) {
             DeckPickerWithDrawer(state = deckPickerDrawerState, actions = deckPickerDrawerActions)
         }
     }

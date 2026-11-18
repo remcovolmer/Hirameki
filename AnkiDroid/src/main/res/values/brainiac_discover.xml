@@ -4,18 +4,13 @@
   Strings of the Brainiac Discover screen. Kept in their own file so the fork rebases cleanly.
 -->
 <resources>
-    <string name="discover_title">Discover</string>
     <string name="discover_refresh">Refresh</string>
     <string name="discover_settings">Discover settings</string>
-    <string name="discover_lessons_header">Lessons</string>
-    <string name="discover_queue_header">Queue</string>
     <string name="discover_no_lessons">No open lessons. New lessons appear here after the routine has run.</string>
-    <string name="discover_queue_empty">The queue is empty.</string>
     <plurals name="discover_cards_to_review">
         <item quantity="one">%d card to review</item>
         <item quantity="other">%d cards to review</item>
     </plurals>
-    <string name="discover_lesson_read">Read</string>
     <string name="discover_process_now">Process now</string>
     <string name="discover_add_title">Add title</string>
     <string name="discover_source_status_queued">Not processed yet</string>
@@ -110,10 +105,50 @@
     <string name="discover_saved_locally_retry">Report again</string>
     <string name="discover_missing_notetype">The note type “%s” does not exist in your collection. Nothing was added; the card stays open.</string>
     <string name="discover_unknown_fields">The note type “%1$s” has no field(s) %2$s. Nothing was added; the card stays open.</string>
-    <string name="discover_review_done">All cards of this lesson are reviewed.</string>
-    <plurals name="discover_review_done_added">
-        <item quantity="one">%d card added. Syncing…</item>
-        <item quantity="other">%d cards added. Syncing…</item>
+    <!-- Tabs, stacks and books -->
+    <string name="discover_tab_lessons">Lessons</string>
+    <string name="discover_tab_books">Books</string>
+    <plurals name="discover_stack_progress">
+        <item quantity="one">%1$d of %2$d lesson</item>
+        <item quantity="other">%1$d of %2$d lessons</item>
     </plurals>
-    <string name="discover_back_to_overview">Back to Discover</string>
+    <string name="discover_up_next">Up next</string>
+    <string name="discover_stack_kind_loose">Single lessons</string>
+    <plurals name="discover_minutes_left">
+        <item quantity="one">%d min left</item>
+        <item quantity="other">%d min left</item>
+    </plurals>
+    <string name="discover_start_stack">Start</string>
+    <string name="discover_lesson_not_read">Not read yet</string>
+    <string name="discover_lesson_done">Completed</string>
+    <string name="discover_next_lesson">Next lesson (%1$d of %2$d)</string>
+    <string name="discover_lesson_finished">Lesson finished</string>
+    <string name="discover_stack_finished">Stack finished</string>
+    <plurals name="discover_cards_added">
+        <item quantity="one">%d card added</item>
+        <item quantity="other">%d cards added</item>
+    </plurals>
+    <string name="discover_syncing_hint">Your collection is being synced.</string>
+    <string name="discover_back_to_stack">Back to the stack</string>
+    <string name="discover_back_to_lessons">Back to lessons</string>
+    <string name="discover_finished_stacks">Finished</string>
+    <string name="discover_filter_to_review">To review</string>
+    <string name="discover_filter_in_progress">In progress</string>
+    <string name="discover_topic_other">Other topics</string>
+    <string name="discover_dismissed_section">Not interested (%d)</string>
+    <string name="discover_books_empty">No books here.</string>
+    <string name="discover_book_why">Why this book</string>
+    <string name="discover_book_key_points">What you take from it</string>
+    <string name="discover_not_interested">Not interested</string>
+    <string name="discover_restore">Restore</string>
+    <string name="discover_dismiss_title">Skip this book?</string>
+    <string name="discover_dismiss_comment">Reason (optional)</string>
+    <plurals name="discover_open_lessons">
+        <item quantity="one">Open its lesson</item>
+        <item quantity="other">Open its %d lessons</item>
+    </plurals>
+    <string name="discover_book_dismissed">Marked as not interested</string>
+    <string name="discover_book_restored">Back in the queue</string>
+    <string name="discover_source_status_dismissed">Dismissed</string>
+    <string name="discover_cover_description">Cover of %s</string>
 </resources>
