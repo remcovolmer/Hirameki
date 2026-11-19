@@ -160,7 +160,7 @@ private fun StackCard(
 ) {
     ElevatedCard(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (stack.kind == StackKind.BOOK && source != null) {
+            if (stack.hasSource && source != null) {
                 BookCover(source, config, Modifier.width(56.dp).height(84.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -210,6 +210,7 @@ private fun StackKind.label(): Int =
         StackKind.BOOK -> R.string.discover_source_kind_book
         StackKind.PATH -> R.string.discover_source_kind_path
         StackKind.LOOSE -> R.string.discover_stack_kind_loose
+        StackKind.PAPER -> R.string.discover_source_kind_paper
     }
 
 /** An opened stack: its lessons in order, and "Continue" to the first one that is not done. */
@@ -229,7 +230,7 @@ internal fun StackScreen(
     ) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (stack.kind == StackKind.BOOK && source != null && config != null) {
+                if (stack.hasSource && source != null && config != null) {
                     BookCover(source, config, Modifier.width(72.dp).height(108.dp))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -191,6 +191,7 @@ data class DiscoverUiState(
     val unsyncedApprovals: Int = 0,
     val bookId: Long? = null,
     val bookFilter: BookFilter = BookFilter.ToReview,
+    val kindFilter: KindFilter = KindFilter.All,
     val dismissedExpanded: Boolean = false,
     /** Set to ask the route to switch to another tab (e.g. from a book to its lessons). */
     val switchToTab: DiscoverTab? = null,
@@ -298,9 +299,13 @@ class DiscoverViewModel(
         author: String?,
         kind: SourceKind,
         note: String?,
+        url: String? = null,
     ) {
         val api = currentConfig()?.let(apiFactory) ?: return
         if (title.isBlank()) return
+        // the service requires a link for a paper; the dialog does not allow adding one without
+        val link = httpsUrlOrNull(url)
+        if (kind == SourceKind.PAPER && link == null) return
         viewModelScope.launch {
             try {
                 api.addSource(
@@ -309,6 +314,7 @@ class DiscoverViewModel(
                         author = author?.trim()?.takeIf { it.isNotEmpty() },
                         kind = kind,
                         note = note?.trim()?.takeIf { it.isNotEmpty() },
+                        url = link,
                     ),
                 )
                 showMessage(DiscoverMessage.SourceAdded)
@@ -337,6 +343,8 @@ class DiscoverViewModel(
     }
 
     fun setBookFilter(filter: BookFilter) = _uiState.update { it.copy(bookFilter = filter) }
+
+    fun setKindFilter(filter: KindFilter) = _uiState.update { it.copy(kindFilter = filter) }
 
     fun toggleDismissed() = _uiState.update { it.copy(dismissedExpanded = !it.dismissedExpanded) }
 
