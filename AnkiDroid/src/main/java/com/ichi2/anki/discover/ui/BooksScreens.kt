@@ -3,13 +3,16 @@
 package com.ichi2.anki.discover.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,9 +23,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,10 +49,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,13 +64,18 @@ import com.ichi2.anki.R
 import com.ichi2.anki.discover.BookFilter
 import com.ichi2.anki.discover.DiscoverConfig
 import com.ichi2.anki.discover.DiscoverError
+import com.ichi2.anki.discover.KindFilter
 import com.ichi2.anki.discover.OverviewState
 import com.ichi2.anki.discover.Source
 import com.ichi2.anki.discover.SourceKind
 import com.ichi2.anki.discover.SourceStatus
 import com.ichi2.anki.discover.bookShelf
+import com.ichi2.anki.discover.canAddSource
+import com.ichi2.anki.discover.httpsUrlOrNull
 import com.ichi2.anki.discover.initials
+import com.ichi2.anki.discover.paperByline
 import com.ichi2.anki.discover.summaryFirstLine
+import timber.log.Timber
 
 /** The Books tab: books grouped by topic, filtered by status; dismissed ones folded away. */
 @Composable
@@ -71,12 +83,14 @@ internal fun BooksOverviewScreen(
     state: OverviewState,
     config: DiscoverConfig?,
     filter: BookFilter,
+    kindFilter: KindFilter,
     dismissedExpanded: Boolean,
     contentPadding: PaddingValues,
     onFilter: (BookFilter) -> Unit,
+    onKindFilter: (KindFilter) -> Unit,
     onToggleDismissed: () -> Unit,
     onOpenBook: (Source) -> Unit,
-    onAddSource: (title: String, author: String?, kind: SourceKind, note: String?) -> Unit,
+    onAddSource: (title: String, author: String?, kind: SourceKind, note: String?, url: String?) -> Unit,
     onRetry: () -> Unit,
     onOpenSettings: () -> Unit,
     onDismissOrphan: (proposalId: Long) -> Unit,
@@ -88,9 +102,23 @@ internal fun BooksOverviewScreen(
             NotConfiguredCard(onOpenSettings)
             return@Column
         }
-        val shelf = remember(state.sources, filter) { bookShelf(state.sources, filter) }
+        val shelf = remember(state.sources, filter, kindFilter) { bookShelf(state.sources, filter, kindFilter) }
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             overviewProblems(state, onRetry, onOpenSettings, onDismissOrphan)
+            if (shelf.hasPapers) {
+                // books and papers: only worth a filter once there are papers
+                item {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        KindFilter.entries.forEach { option ->
+                            FilterChip(
+                                selected = kindFilter == option,
+                                onClick = { onKindFilter(option) },
+                                label = { Text(stringResource(option.label())) },
+                            )
+                        }
+                    }
+                }
+            }
             item {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     BookFilter.entries.forEach { option ->
@@ -132,9 +160,9 @@ internal fun BooksOverviewScreen(
     if (showAddSource) {
         AddSourceDialog(
             onDismiss = { showAddSource = false },
-            onConfirm = { title, author, kind, note ->
+            onConfirm = { title, author, kind, note, url ->
                 showAddSource = false
-                onAddSource(title, author, kind, note)
+                onAddSource(title, author, kind, note, url)
             },
         )
     }
@@ -149,6 +177,13 @@ internal fun SectionHeader(text: String) {
         modifier = Modifier.padding(top = 8.dp),
     )
 }
+
+private fun KindFilter.label(): Int =
+    when (this) {
+        KindFilter.All -> R.string.discover_kind_all
+        KindFilter.Books -> R.string.discover_tab_books
+        KindFilter.Papers -> R.string.discover_kind_papers
+    }
 
 private fun BookFilter.label(): Int =
     when (this) {
@@ -173,6 +208,7 @@ private fun BookRow(
     ) {
         BookCover(book, config, Modifier.width(56.dp).height(84.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (book.isPaper) PaperLabel()
             Text(book.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             byline(book)?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -204,6 +240,10 @@ internal fun BookCover(
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(6.dp)
+    if (book.isPaper) {
+        PaperPlaceholder(book, modifier.clip(shape))
+        return
+    }
     if (!book.hasCover) {
         CoverPlaceholder(book, modifier.clip(shape))
         return
@@ -247,6 +287,93 @@ private fun CoverPlaceholder(
     }
 }
 
+@Composable
+private fun PaperLabel() {
+    Text(
+        stringResource(R.string.discover_source_kind_paper).uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+/**
+ * A paper has no cover: a quiet page instead, with a few text lines, the first author and the
+ * year, so papers are recognisable next to book covers.
+ */
+@Composable
+private fun PaperPlaceholder(
+    paper: Source,
+    modifier: Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    BoxWithConstraints(
+        modifier
+            .background(colors.surfaceContainerHighest)
+            .border(1.dp, colors.outlineVariant, RoundedCornerShape(6.dp)),
+    ) {
+        val compact = maxWidth < 90.dp
+        val pad = if (compact) 6.dp else 12.dp
+        Column(Modifier.fillMaxSize().padding(pad), verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 6.dp)) {
+            Text(
+                stringResource(R.string.discover_source_kind_paper).uppercase(),
+                style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.primary,
+                maxLines = 1,
+            )
+            repeat(if (compact) 4 else 6) { line ->
+                Box(
+                    Modifier
+                        .fillMaxWidth(if (line % 3 == 2) 0.6f else 1f)
+                        .height(if (compact) 2.dp else 3.dp)
+                        .background(colors.onSurfaceVariant.copy(alpha = 0.25f), RoundedCornerShape(1.dp)),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            // small: surname and year on their own lines, so neither gets cut off
+            val byline =
+                if (compact) {
+                    listOfNotNull(paper.author?.substringBefore(' ')?.trimEnd(','), paper.year?.toString())
+                        .joinToString("\n")
+                        .ifEmpty { null }
+                } else {
+                    paper.paperByline()
+                }
+            byline?.let {
+                Text(
+                    it,
+                    style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge,
+                    color = colors.onSurfaceVariant,
+                    maxLines = if (compact) 3 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/** Opens [url] in the browser; only https links reach this point (see [Source.openableUrl]). */
+@Composable
+private fun OpenSourceButton(
+    url: String,
+    prominent: Boolean,
+) {
+    val uriHandler = LocalUriHandler.current
+    val open = {
+        try {
+            uriHandler.openUri(url)
+        } catch (e: IllegalArgumentException) {
+            Timber.w(e, "Discover: cannot open source link")
+        }
+    }
+    if (prominent) {
+        FilledTonalButton(onClick = open, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.discover_open_source)) }
+    } else {
+        OutlinedButton(onClick = open) { Text(stringResource(R.string.discover_open_source)) }
+    }
+}
+
 /** One book: cover, description and what to do with it. */
 @Composable
 internal fun BookDetailScreen(
@@ -272,6 +399,7 @@ internal fun BookDetailScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             if (config != null) BookCover(book, config, Modifier.width(120.dp).height(180.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (book.isPaper) PaperLabel()
                 Text(book.title, style = MaterialTheme.typography.headlineSmall)
                 byline(
                     book,
@@ -286,6 +414,8 @@ internal fun BookDetailScreen(
                 StatusChip(book.status)
             }
         }
+        // a paper is read at its source: the link comes first; for a book it is a footnote
+        book.openableUrl?.takeIf { book.isPaper }?.let { OpenSourceButton(it, prominent = true) }
         BookActions(book, busy, processing, onProcess, onAskDismiss = { askDismiss = true }, onRestore, onOpenLessons)
         book.summary?.takeIf { it.isNotBlank() }?.let { Text(it, style = readingStyle()) }
         if (book.keyPoints.isNotEmpty()) {
@@ -297,7 +427,7 @@ internal fun BookDetailScreen(
             Surface(shape = RoundedCornerShape(16.dp), color = colors.secondaryContainer, contentColor = colors.onSecondaryContainer) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        stringResource(R.string.discover_book_why).uppercase(),
+                        stringResource(if (book.isPaper) R.string.discover_paper_why else R.string.discover_book_why).uppercase(),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                     )
@@ -306,6 +436,7 @@ internal fun BookDetailScreen(
             }
         }
         if (book.status == SourceStatus.FAILED) book.note?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        book.openableUrl?.takeIf { !book.isPaper }?.let { OpenSourceButton(it, prominent = false) }
     }
     if (askDismiss) {
         DismissBookDialog(
@@ -387,8 +518,9 @@ private fun DismissBookDialog(
 @Composable
 private fun AddSourceDialog(
     onDismiss: () -> Unit,
-    onConfirm: (title: String, author: String?, kind: SourceKind, note: String?) -> Unit,
+    onConfirm: (title: String, author: String?, kind: SourceKind, note: String?, url: String?) -> Unit,
 ) {
+    var url by rememberSaveable { mutableStateOf("") }
     var title by rememberSaveable { mutableStateOf("") }
     var author by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf("") }
@@ -411,10 +543,26 @@ private fun AddSourceDialog(
                     singleLine = true,
                 )
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SourceKind.entries.forEach { option ->
+                    ADD_KINDS.forEach { option ->
                         FilterChip(selected = kind == option, onClick = { kind = option }, label = { Text(stringResource(option.label())) })
                     }
                 }
+                val urlInvalid = url.isNotBlank() && httpsUrlOrNull(url) == null
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = {
+                        Text(
+                            stringResource(
+                                if (kind == SourceKind.PAPER) R.string.discover_source_url else R.string.discover_source_url_optional,
+                            ),
+                        )
+                    },
+                    isError = urlInvalid,
+                    supportingText = if (urlInvalid) ({ Text(stringResource(R.string.discover_source_url_invalid)) }) else null,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                )
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
@@ -424,7 +572,7 @@ private fun AddSourceDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(title, author, kind, note) }, enabled = title.isNotBlank()) {
+            TextButton(onClick = { onConfirm(title, author, kind, note, url) }, enabled = canAddSource(title, kind, url)) {
                 Text(stringResource(R.string.discover_add_title))
             }
         },
@@ -437,7 +585,11 @@ private fun SourceKind.label(): Int =
         SourceKind.BOOK -> R.string.discover_source_kind_book
         SourceKind.LEARNING_PATH -> R.string.discover_source_kind_path
         SourceKind.OTHER -> R.string.discover_source_kind_other
+        SourceKind.PAPER -> R.string.discover_source_kind_paper
     }
+
+/** What "Add title" offers: books and papers first. */
+private val ADD_KINDS = listOf(SourceKind.BOOK, SourceKind.PAPER, SourceKind.LEARNING_PATH, SourceKind.OTHER)
 
 /** Top bar actions of both lists. */
 @Composable

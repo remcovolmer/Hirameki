@@ -36,6 +36,9 @@ data class LessonStack(
     /** In the order to read them. */
     val lessons: List<LessonSummary>,
 ) {
+    /** A book or paper: a stack with a source, and so a cover or placeholder. */
+    val hasSource: Boolean get() = kind == StackKind.BOOK || kind == StackKind.PAPER
+
     val total: Int get() = lessons.size
     val doneCount: Int get() = lessons.count { it.progress == LessonProgress.Done }
     val finished: Boolean get() = lessons.all { it.progress == LessonProgress.Done }

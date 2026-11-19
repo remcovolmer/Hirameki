@@ -21,6 +21,21 @@ enum class BookFilter {
         }
 }
 
+/** Which kind of source the Books tab shows; only offered once the list holds a paper. */
+enum class KindFilter {
+    All,
+    Books,
+    Papers,
+    ;
+
+    fun matches(source: Source): Boolean =
+        when (this) {
+            All -> true
+            Books -> !source.isPaper
+            Papers -> source.isPaper
+        }
+}
+
 /** Books under one topic; [topic] is null for books without one ("Other"). */
 data class TopicGroup(
     val topic: String?,
@@ -44,18 +59,40 @@ fun groupByTopic(sources: List<Source>): List<TopicGroup> {
 data class BookShelf(
     val groups: List<TopicGroup>,
     val dismissed: List<Source>,
+    /** Per status, within the chosen kind. */
     val counts: Map<BookFilter, Int>,
+    /** Whether to offer the kind filter at all: only when there are papers. */
+    val hasPapers: Boolean,
 )
 
 fun bookShelf(
     sources: List<Source>,
     filter: BookFilter,
-): BookShelf =
-    BookShelf(
-        groups = groupByTopic(sources.filter { filter.matches(it) }),
-        dismissed = sources.filter { it.status == SourceStatus.DISMISSED },
-        counts = BookFilter.entries.associateWith { f -> sources.count { f.matches(it) } },
+    kind: KindFilter = KindFilter.All,
+): BookShelf {
+    val ofKind = sources.filter { kind.matches(it) }
+    return BookShelf(
+        groups = groupByTopic(ofKind.filter { filter.matches(it) }),
+        dismissed = ofKind.filter { it.status == SourceStatus.DISMISSED },
+        counts = BookFilter.entries.associateWith { f -> ofKind.count { f.matches(it) } },
+        hasPapers = sources.any { it.isPaper },
     )
+}
+
+/** Whether "Add title" may send: a title, and for a paper a valid https link (the service requires one). */
+fun canAddSource(
+    title: String,
+    kind: SourceKind,
+    url: String,
+): Boolean {
+    if (title.isBlank()) return false
+    val link = httpsUrlOrNull(url)
+    return if (kind == SourceKind.PAPER) link != null else url.isBlank() || link != null
+}
+
+/** "Vaswani e.a. · 2017": first author and year, for a paper's placeholder. */
+fun Source.paperByline(): String? =
+    listOfNotNull(author?.trim()?.takeIf { it.isNotEmpty() }, year?.toString()).joinToString(" · ").ifEmpty { null }
 
 /** The first line of a summary, for the list. */
 fun Source.summaryFirstLine(): String? =

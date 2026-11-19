@@ -335,6 +335,19 @@ class DiscoverViewModelTest : JvmTest() {
         }
 
     @Test
+    fun `a paper is only added with an https link`() =
+        runTest {
+            val vm = shownViewModel()
+
+            vm.addSource("Attention Is All You Need", null, SourceKind.PAPER, null, url = "http://arxiv.org/abs/1706.03762")
+            assertNull(vm.state.message)
+
+            vm.addSource("Attention Is All You Need", null, SourceKind.PAPER, null, url = "https://arxiv.org/abs/1706.03762")
+            assertEquals(DiscoverMessage.SourceAdded, vm.state.message)
+            assertEquals("https://arxiv.org/abs/1706.03762", api.addedSources.single().url)
+        }
+
+    @Test
     fun `settings and back are per tab`() =
         runTest {
             val vm = shownViewModel()
@@ -381,6 +394,7 @@ private class ScriptedDiscoverApi : DiscoverApi {
     val readLessons = mutableListOf<Long>()
     val lessonFilters = mutableListOf<String>()
     val dismissComments = mutableListOf<String?>()
+    val addedSources = mutableListOf<NewSourceRequest>()
 
     private val bookStack = LessonStackRef("bron:3", "Atomic Habits", StackKind.BOOK)
     private val pathStack = LessonStackRef("pad:ai", "AI-pad", StackKind.PATH)
@@ -493,6 +507,7 @@ private class ScriptedDiscoverApi : DiscoverApi {
 
     override suspend fun addSource(request: NewSourceRequest): Source {
         check()
+        addedSources.add(request)
         return Source(id = 9, title = request.title, status = SourceStatus.QUEUED).also { sources.add(it) }
     }
 

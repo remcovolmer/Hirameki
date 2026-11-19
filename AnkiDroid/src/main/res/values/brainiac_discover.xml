@@ -151,4 +151,12 @@
     <string name="discover_book_restored">Back in the queue</string>
     <string name="discover_source_status_dismissed">Dismissed</string>
     <string name="discover_cover_description">Cover of %s</string>
+    <string name="discover_source_kind_paper">Paper</string>
+    <string name="discover_kind_all">All sources</string>
+    <string name="discover_kind_papers">Papers</string>
+    <string name="discover_open_source">Open source</string>
+    <string name="discover_source_url">Link (https)</string>
+    <string name="discover_source_url_optional">Link (https, optional)</string>
+    <string name="discover_source_url_invalid">Enter an https link</string>
+    <string name="discover_paper_why">Why this paper</string>
 </resources>

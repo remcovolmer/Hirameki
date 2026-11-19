@@ -5,6 +5,7 @@ package com.ichi2.anki.discover
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /*
  * Data model of the Brainiac service REST API (v1).
@@ -33,6 +34,9 @@ enum class SourceKind {
 
     @SerialName("overig")
     OTHER,
+
+    @SerialName("paper")
+    PAPER,
 }
 
 @Serializable
@@ -78,7 +82,14 @@ data class Source(
     val isbn: String? = null,
     @SerialName("has_cover") val hasCover: Boolean = false,
     @SerialName("lesson_count") val lessonCount: Int = 0,
+    /** Where the source can be found (arXiv page, publisher, author's site); required for papers. */
+    val url: String? = null,
 ) {
+    val isPaper: Boolean get() = kind == SourceKind.PAPER
+
+    /** [url] when it is safe to open in a browser (https only), else null. */
+    val openableUrl: String? get() = httpsUrlOrNull(url)
+
     /** The service accepts `process` and `dismiss` only for sources in these states (otherwise 409). */
     val canProcess: Boolean get() = status == SourceStatus.QUEUED || status == SourceStatus.FAILED
     val canDismiss: Boolean get() = canProcess
@@ -95,6 +106,9 @@ enum class StackKind {
 
     @SerialName("los")
     LOOSE,
+
+    @SerialName("paper")
+    PAPER,
 }
 
 /** The stack a lesson belongs to: one book, one learning path, or the loose lessons. */
@@ -288,7 +302,15 @@ data class NewSourceRequest(
     val author: String? = null,
     val kind: SourceKind? = null,
     val note: String? = null,
+    val url: String? = null,
 )
+
+/** [value] trimmed when it is a valid https URL with a host, else null. Plain http and other schemes are refused. */
+fun httpsUrlOrNull(value: String?): String? {
+    val trimmed = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val url = trimmed.toHttpUrlOrNull() ?: return null
+    return if (url.isHttps && url.host.isNotEmpty()) trimmed else null
+}
 
 @Serializable
 data class ProcessResponse(
