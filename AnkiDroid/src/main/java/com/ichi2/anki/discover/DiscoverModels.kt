@@ -84,6 +84,10 @@ data class Source(
     @SerialName("lesson_count") val lessonCount: Int = 0,
     /** Where the source can be found (arXiv page, publisher, author's site); required for papers. */
     val url: String? = null,
+    /** Estimate of the lessons this source will give (1-12); the actual number once processed. */
+    @SerialName("expected_lessons") val expectedLessons: Int? = null,
+    /** After processing: which ideas were left out on purpose, and why. */
+    val omitted: String? = null,
 ) {
     val isPaper: Boolean get() = kind == SourceKind.PAPER
 
