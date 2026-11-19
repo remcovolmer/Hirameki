@@ -79,6 +79,36 @@ fun bookShelf(
     )
 }
 
+/** How many lessons a source gives: an estimate before processing, the real number after. */
+sealed interface LessonCount {
+    val count: Int
+
+    data class Expected(
+        override val count: Int,
+    ) : LessonCount
+
+    data class Actual(
+        override val count: Int,
+    ) : LessonCount
+}
+
+/**
+ * The lesson count to show for this source, or null when there is nothing worth showing. A
+ * processed source shows its real lessons (falling back on the estimate the routine updates);
+ * any other source shows the estimate.
+ */
+fun Source.lessonCountHint(): LessonCount? {
+    val expected = expectedLessons?.takeIf { it > 0 }
+    if (status == SourceStatus.PROCESSED) {
+        val actual = lessonCount.takeIf { it > 0 } ?: expected ?: return null
+        return LessonCount.Actual(actual)
+    }
+    return expected?.let { LessonCount.Expected(it) }
+}
+
+/** The "Left out" text of a processed source, if the routine left ideas out. */
+fun Source.leftOut(): String? = omitted?.trim()?.takeIf { it.isNotEmpty() && status == SourceStatus.PROCESSED }
+
 /** Whether "Add title" may send: a title, and for a paper a valid https link (the service requires one). */
 fun canAddSource(
     title: String,
@@ -89,6 +119,19 @@ fun canAddSource(
     val link = httpsUrlOrNull(url)
     return if (kind == SourceKind.PAPER) link != null else url.isBlank() || link != null
 }
+
+/**
+ * The surname of the first author, for the small paper placeholder: "Adam Tauman Kalai e.a." gives
+ * "Kalai", "Charles Conn, Robert McLean" gives "Conn".
+ */
+fun Source.firstAuthorSurname(): String? =
+    author
+        ?.substringBefore(',')
+        ?.replace(Regex("""\s+(e\.a\.|et al\.?)$"""), "")
+        ?.trim()
+        ?.split(Regex("""\s+"""))
+        ?.lastOrNull()
+        ?.takeIf { it.isNotEmpty() }
 
 /** "Vaswani e.a. · 2017": first author and year, for a paper's placeholder. */
 fun Source.paperByline(): String? =

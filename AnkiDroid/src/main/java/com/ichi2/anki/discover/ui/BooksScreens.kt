@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -65,14 +66,18 @@ import com.ichi2.anki.discover.BookFilter
 import com.ichi2.anki.discover.DiscoverConfig
 import com.ichi2.anki.discover.DiscoverError
 import com.ichi2.anki.discover.KindFilter
+import com.ichi2.anki.discover.LessonCount
 import com.ichi2.anki.discover.OverviewState
 import com.ichi2.anki.discover.Source
 import com.ichi2.anki.discover.SourceKind
 import com.ichi2.anki.discover.SourceStatus
 import com.ichi2.anki.discover.bookShelf
 import com.ichi2.anki.discover.canAddSource
+import com.ichi2.anki.discover.firstAuthorSurname
 import com.ichi2.anki.discover.httpsUrlOrNull
 import com.ichi2.anki.discover.initials
+import com.ichi2.anki.discover.leftOut
+import com.ichi2.anki.discover.lessonCountHint
 import com.ichi2.anki.discover.paperByline
 import com.ichi2.anki.discover.summaryFirstLine
 import timber.log.Timber
@@ -159,6 +164,8 @@ internal fun BooksOverviewScreen(
     }
     if (showAddSource) {
         AddSourceDialog(
+            // looking at papers: a new title is most likely a paper too
+            initialKind = if (kindFilter == KindFilter.Papers) SourceKind.PAPER else SourceKind.BOOK,
             onDismiss = { showAddSource = false },
             onConfirm = { title, author, kind, note, url ->
                 showAddSource = false
@@ -210,7 +217,8 @@ private fun BookRow(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             if (book.isPaper) PaperLabel()
             Text(book.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            byline(book)?.let {
+            val lessons = book.lessonCountHint()?.let { lessonCountText(it, short = true) }
+            listOfNotNull(byline(book), lessons).joinToString(" · ").ifEmpty { null }?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             book.summaryFirstLine()?.let {
@@ -334,7 +342,7 @@ private fun PaperPlaceholder(
             // small: surname and year on their own lines, so neither gets cut off
             val byline =
                 if (compact) {
-                    listOfNotNull(paper.author?.substringBefore(' ')?.trimEnd(','), paper.year?.toString())
+                    listOfNotNull(paper.firstAuthorSurname(), paper.year?.toString())
                         .joinToString("\n")
                         .ifEmpty { null }
                 } else {
@@ -416,6 +424,14 @@ internal fun BookDetailScreen(
         }
         // a paper is read at its source: the link comes first; for a book it is a footnote
         book.openableUrl?.takeIf { book.isPaper }?.let { OpenSourceButton(it, prominent = true) }
+        // what "Process now" starts: the estimate, right above the button
+        (book.lessonCountHint() as? LessonCount.Expected)?.let {
+            Text(
+                lessonCountText(it, short = false),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         BookActions(book, busy, processing, onProcess, onAskDismiss = { askDismiss = true }, onRestore, onOpenLessons)
         book.summary?.takeIf { it.isNotBlank() }?.let { Text(it, style = readingStyle()) }
         if (book.keyPoints.isNotEmpty()) {
@@ -435,6 +451,7 @@ internal fun BookDetailScreen(
                 }
             }
         }
+        book.leftOut()?.let { LeftOutBlock(it) }
         if (book.status == SourceStatus.FAILED) book.note?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         book.openableUrl?.takeIf { !book.isPaper }?.let { OpenSourceButton(it, prominent = false) }
     }
@@ -446,6 +463,42 @@ internal fun BookDetailScreen(
                 onDismiss(it)
             },
         )
+    }
+}
+
+@Composable
+private fun lessonCountText(
+    count: LessonCount,
+    short: Boolean,
+): String =
+    when {
+        count is LessonCount.Actual -> pluralStringResource(R.plurals.discover_lessons_actual, count.count, count.count)
+        short -> pluralStringResource(R.plurals.discover_lessons_expected_short, count.count, count.count)
+        else -> pluralStringResource(R.plurals.discover_lessons_expected, count.count, count.count)
+    }
+
+/** Ideas the routine left out of a processed book; folded away, it is background. */
+@Composable
+private fun LeftOutBlock(text: String) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(16.dp), color = colors.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.clickable { expanded = !expanded }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.discover_left_out).uppercase(),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    painterResource(R.drawable.keyboard_arrow_down_24px),
+                    contentDescription = null,
+                    modifier = Modifier.rotate(if (expanded) 180f else 0f),
+                )
+            }
+            if (expanded) Text(text, style = readingStyle())
+        }
     }
 }
 
@@ -517,6 +570,7 @@ private fun DismissBookDialog(
 
 @Composable
 private fun AddSourceDialog(
+    initialKind: SourceKind,
     onDismiss: () -> Unit,
     onConfirm: (title: String, author: String?, kind: SourceKind, note: String?, url: String?) -> Unit,
 ) {
@@ -524,7 +578,7 @@ private fun AddSourceDialog(
     var title by rememberSaveable { mutableStateOf("") }
     var author by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf("") }
-    var kind by rememberSaveable { mutableStateOf(SourceKind.BOOK) }
+    var kind by rememberSaveable { mutableStateOf(initialKind) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.discover_add_title)) },
