@@ -203,6 +203,32 @@ class DiscoverViewModelTest : JvmTest() {
         }
 
     @Test
+    fun `withdrawn proposals are not reviewed and do not keep a lesson open`() =
+        runTest {
+            api.cardsPerLesson = 8
+            api.withdrawnPerLesson = 2
+            val vm = shownViewModel()
+            val stack =
+                assertNotNull(
+                    vm.state.overview.openStacks
+                        .firstOrNull { it.key == "bron:3" },
+                )
+            assertEquals("only new cards count", 5 * 8, stack.cardsToReview)
+
+            vm.openStack("bron:3")
+            vm.continueStack()
+            assertEquals(8, assertNotNull(vm.state.lesson).toReview.size)
+            assertTrue(assertNotNull(vm.state.lesson).toReview.none { it.status == ProposalStatus.WITHDRAWN })
+
+            vm.readAndDecideAll { approve() }
+
+            assertEquals(8, assertNotNull(vm.state.lesson).approvedCount)
+            val next = assertIs<AfterLesson.Next>(vm.state.afterLesson)
+            assertEquals(4, next.number)
+            assertEquals("the finished lesson counts as done", 3, vm.state.openStack?.doneCount)
+        }
+
+    @Test
     fun `a stack of one lesson opens that lesson`() =
         runTest {
             val vm = shownViewModel()
@@ -441,10 +467,18 @@ private class ScriptedDiscoverApi : DiscoverApi {
         sources.replaceAll { if (it.id == sourceId) it.copy(status = status) else it }
     }
 
+    /** Proposals withdrawn by Claude before the user decided; they come last in each lesson. */
+    var withdrawnPerLesson = 0
+
     private fun proposalsOf(lessonId: Long) =
         (1..cardsPerLesson)
             .map { n -> basicProposal(id = lessonId * 100 + n, notetype = notetype).copy(lessonId = lessonId) }
-            .filter { p -> decisions.none { it.first == p.id } }
+            .filter { p -> decisions.none { it.first == p.id } } +
+            (1..withdrawnPerLesson).map { n ->
+                basicProposal(id = lessonId * 100 + 50 + n).copy(lessonId = lessonId, status = ProposalStatus.WITHDRAWN)
+            }
+
+    private fun newCount(lessonId: Long) = proposalsOf(lessonId).count { it.status == ProposalStatus.NEW }
 
     override suspend fun openLessons(): List<LessonSummary> = throw UnsupportedOperationException("the app asks for all lessons")
 
@@ -461,8 +495,9 @@ private class ScriptedDiscoverApi : DiscoverApi {
                             ) {
                                 0
                             } else {
-                                proposalsOf(s.id).size
+                                newCount(s.id)
                             },
+                        withdrawn = withdrawnPerLesson,
                     ),
             )
         }

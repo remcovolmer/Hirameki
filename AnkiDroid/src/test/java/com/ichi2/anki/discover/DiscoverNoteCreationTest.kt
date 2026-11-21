@@ -133,4 +133,23 @@ class DiscoverNoteCreationTest : JvmTest() {
                     .second.ankiNoteId,
             )
         }
+
+    @Test
+    fun `a scenario deck with an apostrophe and spaces is created as a nested deck`() {
+        val deck = "Brainiac Scenario's::Boeken::Atomic Habits"
+
+        val result = assertIs<NoteCreationResult.Created>(col.addDiscoverNote(spec(deck = deck)))
+
+        val deckId = assertNotNull(col.decks.idForName(deck))
+        assertEquals(
+            deckId,
+            col
+                .getNote(result.noteId)
+                .cards()
+                .single()
+                .did,
+        )
+        assertNotNull(col.decks.idForName("Brainiac Scenario's::Boeken"))
+        assertEquals(deck, col.decks.name(deckId))
+    }
 }

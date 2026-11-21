@@ -138,4 +138,17 @@ class LessonStacksTest {
 
         assertEquals(listOf(2L, 1L), stack.lessons.map { it.id })
     }
+
+    @Test
+    fun `a read lesson whose cards are all decided or withdrawn is done`() {
+        val withdrawnOnly =
+            discoverJson.decodeFromString(
+                LessonSummary.serializer(),
+                """{"id": 1, "slug": "a", "title": "t", "status": "gelezen",
+                    "proposal_counts": {"nieuw": 0, "goedgekeurd": 3, "afgewezen": 5, "feedback": 0, "ingetrokken": 2, "toekomstig": 1}}""",
+            )
+
+        assertEquals(LessonProgress.Done, withdrawnOnly.progress)
+        assertEquals(2, withdrawnOnly.proposalCounts.withdrawn)
+    }
 }
