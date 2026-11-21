@@ -108,4 +108,21 @@ class PapersTest {
         assertTrue(body.contains("\"kind\":\"paper\""))
         assertTrue(body.contains("\"url\":\"https://arxiv.org/abs/1\""))
     }
+
+    @Test
+    fun `a withdrawn or replaced proposal is read`() {
+        val withdrawn =
+            discoverJson.decodeFromString(
+                Proposal.serializer(),
+                """{"id": 1, "lesson_id": 2, "deck": "d", "notetype": "Basic", "status": "ingetrokken"}""",
+            )
+        val replaced =
+            discoverJson.decodeFromString(
+                Proposal.serializer(),
+                """{"id": 1, "lesson_id": 2, "deck": "d", "notetype": "Basic", "status": "goedgekeurd", "replaced": true}""",
+            )
+
+        assertEquals(ProposalStatus.WITHDRAWN, withdrawn.status)
+        assertTrue(replaced.replaced)
+    }
 }

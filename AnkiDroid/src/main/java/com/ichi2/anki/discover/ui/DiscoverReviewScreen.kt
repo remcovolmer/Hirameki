@@ -98,7 +98,12 @@ private fun ProposalReview(
     var changeMenuOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        // with up to ten small cards per lesson, the bar shows how far along you are
+        if (busy) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        } else {
+            LinearProgressIndicator(progress = { index.toFloat() / total.coerceAtLeast(1) }, modifier = Modifier.fillMaxWidth())
+        }
         Column(
             Modifier
                 .weight(1f)

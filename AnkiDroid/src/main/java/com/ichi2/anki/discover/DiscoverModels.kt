@@ -140,6 +140,7 @@ data class ProposalCounts(
     @SerialName("goedgekeurd") val approved: Int = 0,
     @SerialName("afgewezen") val rejected: Int = 0,
     @SerialName("feedback") val feedback: Int = 0,
+    @SerialName("ingetrokken") val withdrawn: Int = 0,
 )
 
 @Serializable
@@ -235,6 +236,10 @@ enum class ProposalStatus {
     @SerialName("feedback")
     FEEDBACK,
 
+    /** Taken back by Claude before the user decided (e.g. replaced by smaller cards); counts nowhere. */
+    @SerialName("ingetrokken")
+    WITHDRAWN,
+
     UNKNOWN,
 }
 
@@ -264,6 +269,8 @@ data class Proposal(
     val tags: List<String> = emptyList(),
     val step: String? = null,
     val status: ProposalStatus = ProposalStatus.UNKNOWN,
+    /** An approved card that was replaced in Anki by new ones. */
+    val replaced: Boolean = false,
     val revision: Int = 1,
     val comment: String? = null,
     @SerialName("anki_note_id") val ankiNoteId: Long? = null,
